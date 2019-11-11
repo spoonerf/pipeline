@@ -19,8 +19,12 @@ source("SA_pipeline_functions.R")
 ```{r Libraries}
 #devtools::install_github("https://github.com/hferg/sdmpl", auth_token = GITHUB_PAT)
 
+library(CoordinateCleaner)
 library(dplyr)
+library(here)
+library(lwgeom)
 library(raster)
+library(readr)
 library(sdmpl)
 library(sf)
 ```
@@ -79,9 +83,15 @@ all_sp<-rbind(g_sp, san_df)
 
 ```{r Downloading data from GBIF}
 
-gbifData(all_sp$species[1], ext = ext)
+#gbifData(all_sp$species[1], ext = ext)
 
-spxy_out<-lapply(s_sp[1:4], gbifData, ext = ext)
+spxy_out <- lapply(s_sp[1:4], gbifData, ext = ext)
+
+sp_df <- data.frame(do.call(rbind, spxy_out))
+
+sp_df$species <- as.character(sp_df$species)
+sp_df$x <- as.numeric(as.character(sp_df$x))
+sp_df$y <- as.numeric(as.character(sp_df$y))
 
 ```
 
@@ -89,6 +99,8 @@ spxy_out<-lapply(s_sp[1:4], gbifData, ext = ext)
 
 ##Coordinate Cleaner
 ```{r}
+
+clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
 
 ```
 
