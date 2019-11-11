@@ -1,0 +1,79 @@
+---
+title: "SA_pipe"
+author: "Fiona Spooner"
+date: "11/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r Sourcing}
+source(here::here("combine/FS","pat.R"))
+source("SA_pipeline_functions.R")
+
+```
+
+
+```{r Libraries}
+devtools::install_github("https://github.com/hferg/sdmpl", auth_token = GITHUB_PAT)
+
+library(dplyr)
+library(raster)
+library(sdmpl)
+library(sf)
+```
+
+# Data Preparation 
+
+We are only interested in species that occur in southern Africa, here defined as locations below the equator on the African continent. 
+
+```{r Data preparation - setting extent}
+
+xmin <- 4
+xmax <- 59 # could be 52 if we don't want to include Mauritius 
+ymin <- -35
+ymax <- 0
+
+ext<-extent(xmin, xmax, ymin, ymax)
+
+```
+
+```{r List of Species - gathered from SANBI}
+gbif_all <- read.csv("D:/Fiona/SHEFS/GBIF/Species_List/All_GBIF_Species_List.csv")
+
+g_sp <- gbif_all %>% 
+  dplyr::select(kingdom, phylum, class, order, family, genus, species) %>% 
+  filter(!is.na(species)) %>% 
+  distinct()
+
+```
+
+
+```{r}
+sanbi_all <- 
+  do.call(rbind,
+          lapply(list.files(path = "D:/Fiona/SHEFS/SANBI/Species_List", pattern = "*.csv", full.names = TRUE), read.csv))
+
+s_sp <- na.omit(unique(as.character(sanbi_all$Binomial)))
+
+s_sp<-s_sp[!s_sp %in% g_sp]
+
+
+``` 
+
+Get the taxonomy of the species as we are only interested in certain groups of species e.g. only terrestrial sp.
+
+```{r}
+
+
+```
+
+```{r Downloading data from GBIF}
+
+gbifData(s_sp[3], ext = ext)
+
+spxy_out<-lapply(all_sp[1:10], gbifData, ext = ext)
+
+```
