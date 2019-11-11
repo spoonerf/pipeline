@@ -17,7 +17,7 @@ source("SA_pipeline_functions.R")
 
 
 ```{r Libraries}
-devtools::install_github("https://github.com/hferg/sdmpl", auth_token = GITHUB_PAT)
+#devtools::install_github("https://github.com/hferg/sdmpl", auth_token = GITHUB_PAT)
 
 library(dplyr)
 library(raster)
@@ -40,12 +40,14 @@ ext<-extent(xmin, xmax, ymin, ymax)
 
 ```
 
+
+Removing species we aren't interested in e.g. fish.
 ```{r List of Species - gathered from SANBI}
-gbif_all <- read.csv("D:/Fiona/SHEFS/GBIF/Species_List/All_GBIF_Species_List.csv")
+gbif_all <- read.csv("D:/Fiona/SHEFS/GBIF/Species_List/All_GBIF_Species_List.csv", stringsAsFactors = FALSE)
 
 g_sp <- gbif_all %>% 
   dplyr::select(kingdom, phylum, class, order, family, genus, species) %>% 
-  filter(!is.na(species)) %>% 
+  filter(!is.na(species) & (kingdom == "Animalia"| kingdom == "Plantae") & (phylum == "Arthrpoda" | phylum == "Chordata" | phylum == "Tracheophyta" ) & (class != "Actinopterygii" & class != "Elasmobranchii")) %>% 
   distinct()
 
 ```
@@ -63,17 +65,96 @@ s_sp<-s_sp[!s_sp %in% g_sp]
 
 ``` 
 
-Get the taxonomy of the species as we are only interested in certain groups of species e.g. only terrestrial sp.
+Get the taxonomy of the species gathered from SANBI 
 
 ```{r}
 
+tr_out<-lapply(s_sp[1:10], tax_out)
+
+san_df<-do.call(rbind, tr_out)
+
+all_sp<-rbind(g_sp, san_df)
 
 ```
 
 ```{r Downloading data from GBIF}
 
-gbifData(s_sp[3], ext = ext)
+gbifData(all_sp$species[1], ext = ext)
 
-spxy_out<-lapply(all_sp[1:10], gbifData, ext = ext)
+spxy_out<-lapply(s_sp[1:4], gbifData, ext = ext)
 
 ```
+
+
+
+##Coordinate Cleaner
+```{r}
+
+```
+
+###Rarefy Points
+```{r}
+
+
+```
+
+
+###Environmental Data Prep
+```{r}
+
+
+```
+
+###Extract Data
+```{r}
+
+```
+
+
+###Background Data
+```{r}
+
+ecoreg <-
+  st_read(here::here("WWF_Ecoregions/official/wwf_terr_ecos.shp"))
+
+ecoreg <- ecoreg %>%
+  select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
+
+occ_files <-
+  list.files(
+    here::here("GBIF/Occurences/Network_Groups/"),
+    pattern = "*.csv",
+    full.names = TRUE,
+    recursive = TRUE
+  )
+
+
+background_sampler <- function(occ_file, no_pnts) {
+  sf_int <- read_csv(occ_file) %>%
+    dplyr::select("decimalLongitude", "decimalLatitude") %>%
+    distinct() %>%
+    st_as_sf(.,
+             coords = c("decimalLongitude", "decimalLatitude"),
+             crs = 4326) %>%
+    st_intersection(., ecoreg)
+  
+  bkg_ecoreg <- ecoreg %>%
+    filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
+    st_sample(., size = no_pnts, type = "random")
+  
+  print(basename(occ_file))
+  return(bkg_ecoreg)
+}
+
+
+
+
+```
+
+###Fit Models
+```{r}
+
+
+```
+
+
