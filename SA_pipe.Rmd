@@ -31,19 +31,18 @@ library(sf)
 
 # Data Preparation 
 
-We are only interested in species that occur in southern Africa, here defined as locations below the equator on the African continent. 
-
+We are only interested in species that occur in the study region - 'montane grasslands and shrublands' biome, below 21o south, in Africa (ext_sp). We will download all occurrences for these species south of the equator in Africa (ext_occ).
 ```{r Data preparation - setting extent}
 
 bm<-st_read(here::here("WWF_Ecoregions/Species_Selection_Area_True.shp"))
-ext<-extent(bm)
+ext_sp<-extent(bm)
 
-# xmin <- 4
-# xmax <- 59 # could be 52 if we don't want to include Mauritius 
-# ymin <- -35
-# ymax <- 0
-# 
-# ext<-extent(xmin, xmax, ymin, ymax)
+xmin <- 4
+xmax <- 59 # could be 52 if we don't want to include Mauritius 
+ymin <- -35
+ymax <- 0
+ 
+ext_occ<-extent(xmin, xmax, ymin, ymax)
 
 ```
 
@@ -92,7 +91,7 @@ Get the taxonomy of the species gathered from SANBI - if needed
 
 #gbifData(all_sp$species[1], ext = ext)
 
-spxy_out <- lapply(all_sp[1:20], gbifData, ext = ext)
+spxy_out <- lapply(all_sp[1:100], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
 
 sp_df <- data.frame(do.call(rbind, spxy_out))
 
@@ -116,7 +115,9 @@ sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
 
 ###Environmental Data Prep
 ```{r}
-env_layers <-loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
+env_layers <- loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
+env_crop <- crop(env_layers, ext)
+
 
 ```
 
