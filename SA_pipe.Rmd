@@ -186,12 +186,39 @@ occ_files <-
 
 
 bg_out <- lapply(occ_files, background_sampler, no_pnts = 10000 )
+names(bg_out)<-gsub(".csv","",basename(occ_files))
 
+format_bg_points<-function(sfc_data){
+  
+  tibb <- as_tibble(sfc_data)
+  
+  sep_df <- tibb %>% 
+    mutate(x = unlist(map(tibb$geometry,1)),
+           y = unlist(map(tibb$geometry, 2))) %>% 
+    dplyr::select(x, y)
+  return(sep_df)
+}
 
+bg_out_df <- lapply(X = bg_out, FUN = format_bg_points)
 #background_sampler(occ_files[1], 10000)
 
+out_df <- dplyr::bind_rows(bg_out_df, .id = 'species')
 
 
+bg_r_xy <- SpatialPointsDataFrame(matrix(c(out_df$x, out_df$y), ncol = 2), out_df)
+
+ras_ext<-raster::extract(env_crop, bg_r_xy)
+
+bg_ext<-data.frame(out_df, ras_ext)
+
+
+
+```
+
+
+###Format Presence and Background data
+
+```{r}
 
 
 ```
