@@ -115,22 +115,54 @@ sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
 
 ###Environmental Data Prep
 ```{r}
-env_layers <- loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
-env_crop <- crop(env_layers, ext)
 
+env_layers <- loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
+env_crop <- crop(env_layers, ext_occ)
 
 ```
 
 
 ###Rarefy Points
 ```{r}
-rarefyPoints()
+rarefySpeciesPoints<-function(species){
+  
+  df <- sp_df[sp_df$species == species,]
+  df_xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  df_rar <- data.frame(species,rarefyPoints(env_crop[[1]], df_xy))
+  
+  print(species)
+  
+  return(df_rar)
+  
+  }
+
+
+rarefy_out <- lapply(unique(sp_df$species), rarefySpeciesPoints)
+#r_sp_df <- do.call(rbind, rarefy_out)
+
+
+output_csv <- function(data, names){ 
+    folder_path <- here::here("occurrence")
+    write_csv(data, paste0(folder_path,"/", names, ".csv"))
+  }
+
+list(data = rarefy_out,
+     names = gsub(" ","_",unique(sp_df$species))) %>% 
+     purrr::pmap(output_csv) 
+
 
 ```
 
 
 ###Extract Data
 ```{r}
+
+sp_r_xy <- SpatialPointsDataFrame(matrix(c(sp_r_df$x, sp_r_df$y), ncol = 2), sp_r_df)
+
+ras_ext<-raster::extract(env_crop, sp_r_xy)
+
+pres_ext<-data.frame(sp_r_df, ras_ext)
+
 
 ```
 
@@ -139,36 +171,25 @@ rarefyPoints()
 ```{r}
 
 ecoreg <-
-  sf::st_read(here::here("WWF_Ecoregions/official/wwf_terr_ecos.shp"))
+  sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp"))
 
 ecoreg <- ecoreg %>%
   dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
 
 occ_files <-
   list.files(
-    here::here("GBIF/Occurences/Network_Groups/"),
+    here::here("occurrence/"),
     pattern = "*.csv",
     full.names = TRUE,
     recursive = TRUE
   )
 
 
-background_sampler <- function(occ_file, no_pnts) {
-  sf_int <- read_csv(occ_file) %>%
-    dplyr::select("decimalLongitude", "decimalLatitude") %>%
-    dplyr::distinct() %>%
-    sf::st_as_sf(.,
-             coords = c("decimalLongitude", "decimalLatitude"),
-             crs = 4326) %>%
-    sf::st_intersection(., ecoreg)
-  
-  bkg_ecoreg <- ecoreg %>%
-    dplyr::filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
-    sf::st_sample(., size = no_pnts, type = "random")
-  
-  print(basename(occ_file))
-  return(bkg_ecoreg)
-}
+bg_out <- lapply(occ_files, background_sampler, no_pnts = 10000 )
+
+
+#background_sampler(occ_files[1], 10000)
+
 
 
 
