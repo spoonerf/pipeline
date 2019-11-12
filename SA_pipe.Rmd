@@ -25,7 +25,7 @@ library(here)
 library(lwgeom)
 library(raster)
 library(readr)
-library(sdmpl)
+#library(sdmpl)
 library(sf)
 ```
 
@@ -48,12 +48,12 @@ ext<-extent(bm)
 ```
 
 
-Removing species we aren't interested in e.g. fish.
+Removing species we aren't interested in e.g. fish. Leaving out birds for now as they all have large number of occurrences
 ```{r List of Species - gathered from SANBI}
 gbif_all <- read.csv("D:/Fiona/SHEFS/GBIF/Species_List/All_GBIF_Species_List.csv", stringsAsFactors = FALSE)
 
 g_sp <- gbif_all %>% 
-  dplyr::filter(!is.na(species) & (class == "Mammalia" | class == "Gastropoda" | class == "Reptilia" | class == "Aves" | 
+  dplyr::filter(!is.na(species) & (class == "Mammalia" | class == "Gastropoda" | class == "Reptilia" |# class == "Aves" | 
            order == "Lepidoptera" | order == "Odonata" | order == "Hemiptera" | order == "Anura" | 
            order == "Neuroptera" | order == "Scorpiones" | order == "Araneae" | order == "Rodentia" |
            family == "Geotrupidae" | family == "Scarabaeidae" | family == "Viperidae" | family == "Lamprophiidae" |
@@ -76,7 +76,7 @@ all_sp<-c(g_sp$species, s_sp)
 
 ``` 
 
-Get the taxonomy of the species gathered from SANBI 
+Get the taxonomy of the species gathered from SANBI - if needed 
 
 ```{r, eval = FALSE}
 # 
@@ -107,24 +107,26 @@ sp_df$y <- as.numeric(as.character(sp_df$y))
 ##Coordinate Cleaner
 ```{r}
 
-test <- clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+sp_cc <- clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
 
-sp_df<-sp_df[which(test$.summary == TRUE),]
-
-```
-
-###Rarefy Points
-```{r}
-
+sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
 
 ```
 
 
 ###Environmental Data Prep
 ```{r}
-
+env_layers <-loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
 
 ```
+
+
+###Rarefy Points
+```{r}
+rarefyPoints()
+
+```
+
 
 ###Extract Data
 ```{r}
@@ -136,10 +138,10 @@ sp_df<-sp_df[which(test$.summary == TRUE),]
 ```{r}
 
 ecoreg <-
-  st_read(here::here("WWF_Ecoregions/official/wwf_terr_ecos.shp"))
+  sf::st_read(here::here("WWF_Ecoregions/official/wwf_terr_ecos.shp"))
 
 ecoreg <- ecoreg %>%
-  select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
+  dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
 
 occ_files <-
   list.files(
@@ -153,15 +155,15 @@ occ_files <-
 background_sampler <- function(occ_file, no_pnts) {
   sf_int <- read_csv(occ_file) %>%
     dplyr::select("decimalLongitude", "decimalLatitude") %>%
-    distinct() %>%
-    st_as_sf(.,
+    dplyr::distinct() %>%
+    sf::st_as_sf(.,
              coords = c("decimalLongitude", "decimalLatitude"),
              crs = 4326) %>%
-    st_intersection(., ecoreg)
+    sf::st_intersection(., ecoreg)
   
   bkg_ecoreg <- ecoreg %>%
-    filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
-    st_sample(., size = no_pnts, type = "random")
+    dplyr::filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
+    sf::st_sample(., size = no_pnts, type = "random")
   
   print(basename(occ_file))
   return(bkg_ecoreg)
@@ -178,4 +180,20 @@ background_sampler <- function(occ_file, no_pnts) {
 
 ```
 
+###Evaluate Models
+```{r}
 
+
+```
+
+###Build Ensemble Model
+```{r}
+
+```
+
+
+###Predict Forward
+```{r}
+
+
+```
