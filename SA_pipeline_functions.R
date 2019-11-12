@@ -1,9 +1,9 @@
 
 
 
+
 gbifData <- function(species, ext) {
   # Include something for if there is nothing in GBIF...
-  print(paste0(species, " starting!"))
   gen <- strsplit(species, " ")[[1]][1]
   sp <- strsplit(species, " ")[[1]][2]
   
@@ -31,10 +31,11 @@ gbifData <- function(species, ext) {
     } else {
       if (all(c("lon", "lat") %in% colnames(.xx))) {
         xx <- cbind(.xx$lon, .xx$lat)
-        output_data <- matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
+        output_data <-
+          matrix(unique(xx[complete.cases(xx),]), ncol = 2)
         output_data <- cbind(species, output_data)
         colnames(output_data) <- c("species", "x", "y")
-        } else {
+      } else {
         output_data <- NULL
       }
     }
@@ -59,7 +60,7 @@ tax_out <- function(id) {
                                     "order",
                                     "family",
                                     "genus",
-                                    "species"),]
+                                    "species"), ]
     
     sp_out$kingdom <- sp_out$name[sp_out$rank == "kingdom"]
     sp_out$phylum <- sp_out$name[sp_out$rank == "phylum"]
@@ -69,16 +70,37 @@ tax_out <- function(id) {
     sp_out$genus <- sp_out$name[sp_out$rank == "genus"]
     sp_out$species <- sp_out$name[sp_out$rank == "species"]
     
-   
-    sp_out <- sp_out %>% 
-      dplyr::select(kingdom, phylum, class, order, family, genus, species) %>% 
+    
+    sp_out <- sp_out %>%
+      dplyr::select(kingdom, phylum, class, order, family, genus, species) %>%
       distinct()
     
   }
-  return(sp_out)  
+  return(sp_out)
 }
 
 
+
+loadBioclim <- function(path, extension, extent = NULL, prjctn = NULL) {
+  bio_layers <- list.files(
+    path, pattern = paste0(extension, "$"), full.names = TRUE
+  )
+   bioclim <- raster::stack(bio_layers)
+#  bioclim <- raster::stack()    #don't think this section is needed, have replaced with the line above but maybe I'm missing something
+#  for (i in bio_layers) {
+#    bioclim <- raster::stack(bioclim, raster[i])
+#  }
+  if (!is.null(extent)) {
+    bioclim <- raster::crop(bioclim, extent)
+  }
+  if (!is.null(prjctn)) {
+    if (class(prjctn) != "CRS") {
+      stop("Projection must be an object of class CRS.")
+    }
+    bioclim <- raster::projectRaster(bioclim, crs = prjctn)
+  }
+  return(bioclim)
+}
 
 
 background_sampler <- function(occ_file, no_pnts) {
@@ -96,4 +118,20 @@ background_sampler <- function(occ_file, no_pnts) {
   
   print(basename(occ_file))
   return(bkg_ecoreg)
+}
+
+
+rarefyPoints <- function(ref_map, pnts) {
+  cells <- raster::cellFromXY(ref_map, pnts)
+  pres_cells <- ref_map
+  pres_cells[unique(cells)] <- 1
+  rarefied_presence <- raster::rasterToPoints(
+    pres_cells,
+    fun = function(x) {
+      x == 1
+    }
+  )[, c(1, 2)]
+  rarefied_presence <- sp::SpatialPoints(rarefied_presence)
+  sp::proj4string(rarefied_presence) <- sp::proj4string(ref_map)
+  return(rarefied_presence)
 }
