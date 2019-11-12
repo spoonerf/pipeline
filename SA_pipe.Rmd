@@ -35,12 +35,15 @@ We are only interested in species that occur in southern Africa, here defined as
 
 ```{r Data preparation - setting extent}
 
-xmin <- 4
-xmax <- 59 # could be 52 if we don't want to include Mauritius 
-ymin <- -35
-ymax <- 0
+bm<-st_read(here::here("WWF_Ecoregions/Species_Selection_Area_True.shp"))
+ext<-extent(bm)
 
-ext<-extent(xmin, xmax, ymin, ymax)
+# xmin <- 4
+# xmax <- 59 # could be 52 if we don't want to include Mauritius 
+# ymin <- -35
+# ymax <- 0
+# 
+# ext<-extent(xmin, xmax, ymin, ymax)
 
 ```
 
@@ -50,10 +53,13 @@ Removing species we aren't interested in e.g. fish.
 gbif_all <- read.csv("D:/Fiona/SHEFS/GBIF/Species_List/All_GBIF_Species_List.csv", stringsAsFactors = FALSE)
 
 g_sp <- gbif_all %>% 
-  dplyr::select(kingdom, phylum, class, order, family, genus, species) %>% 
-  filter(!is.na(species) & (kingdom == "Animalia"| kingdom == "Plantae") & (phylum == "Arthrpoda" | phylum == "Chordata" | phylum == "Tracheophyta" ) & (class != "Actinopterygii" & class != "Elasmobranchii")) %>% 
-  distinct()
-
+  dplyr::filter(!is.na(species) & (class == "Mammalia" | class == "Gastropoda" | class == "Reptilia" | class == "Aves" | 
+           order == "Lepidoptera" | order == "Odonata" | order == "Hemiptera" | order == "Anura" | 
+           order == "Neuroptera" | order == "Scorpiones" | order == "Araneae" | order == "Rodentia" |
+           family == "Geotrupidae" | family == "Scarabaeidae" | family == "Viperidae" | family == "Lamprophiidae" |
+           family == "Colubridae"  | family == "Elapidae" | family == "Pythonidae" | family == "Typhlopidae")) %>% 
+  dplyr::select(species) %>% 
+  distinct() 
 ```
 
 
@@ -64,28 +70,29 @@ sanbi_all <-
 
 s_sp <- na.omit(unique(as.character(sanbi_all$Binomial)))
 
-s_sp<-s_sp[!s_sp %in% g_sp]
+s_sp<-s_sp[!s_sp %in% g_sp$species]
 
+all_sp<-c(g_sp$species, s_sp)
 
 ``` 
 
 Get the taxonomy of the species gathered from SANBI 
 
-```{r}
-
-tr_out<-lapply(s_sp[1:10], tax_out)
-
-san_df<-do.call(rbind, tr_out)
-
-all_sp<-rbind(g_sp, san_df)
+```{r, eval = FALSE}
+# 
+# tr_out<-lapply(s_sp[1:10], tax_out)
+# 
+# san_df<-do.call(rbind, tr_out)
+# 
+# all_sp<-rbind(g_sp, san_df)
 
 ```
 
-```{r Downloading data from GBIF}
+```{r Downloading data from GBIF and cleaning it before outputting}
 
 #gbifData(all_sp$species[1], ext = ext)
 
-spxy_out <- lapply(s_sp[1:4], gbifData, ext = ext)
+spxy_out <- lapply(all_sp[1:20], gbifData, ext = ext)
 
 sp_df <- data.frame(do.call(rbind, spxy_out))
 
@@ -100,7 +107,9 @@ sp_df$y <- as.numeric(as.character(sp_df$y))
 ##Coordinate Cleaner
 ```{r}
 
-clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+test <- clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+
+sp_df<-sp_df[which(test$.summary == TRUE),]
 
 ```
 
