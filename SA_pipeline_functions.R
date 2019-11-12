@@ -3,6 +3,7 @@
 
 gbifData <- function(species, ext) {
   # Include something for if there is nothing in GBIF...
+  print(paste0(species, " starting!"))
   gen <- strsplit(species, " ")[[1]][1]
   sp <- strsplit(species, " ")[[1]][2]
   
@@ -30,14 +31,10 @@ gbifData <- function(species, ext) {
     } else {
       if (all(c("lon", "lat") %in% colnames(.xx))) {
         xx <- cbind(.xx$lon, .xx$lat)
-        output_data <- unique(xx[complete.cases(xx), ])
+        output_data <- matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
         output_data <- cbind(species, output_data)
-        if (length(output_data) == 3) {
-          names(output_data) <- c("species", "x", "y")
+        colnames(output_data) <- c("species", "x", "y")
         } else {
-          colnames(output_data) <- c("species", "x", "y")
-        }
-      } else {
         output_data <- NULL
       }
     }
