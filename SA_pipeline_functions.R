@@ -2,7 +2,7 @@
 
 
 
-gbifData <- function(species, ext) {
+gbifData <- function(species, ext_sp, ext_occ) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(species, " ")[[1]][1]
   sp <- strsplit(species, " ")[[1]][2]
@@ -11,7 +11,7 @@ gbifData <- function(species, ext) {
   .count <- dismo::gbif(
     genus = gen,
     species = sp,
-    ext = ext,
+    ext = ext_sp,
     geo = TRUE,
     removeZeros = TRUE,
     download = FALSE
@@ -20,7 +20,7 @@ gbifData <- function(species, ext) {
     .xx <- dismo::gbif(
       genus = gen,
       species = sp,
-      ext = ext,
+      ext = ext_occ,
       geo = TRUE,
       removeZeros = TRUE,
       download = TRUE
@@ -103,22 +103,7 @@ loadBioclim <- function(path, extension, extent = NULL, prjctn = NULL) {
 }
 
 
-background_sampler <- function(occ_file, no_pnts) {
-  sf_int <- read_csv(occ_file) %>%
-    dplyr::select("decimalLongitude", "decimalLatitude") %>%
-    distinct() %>%
-    st_as_sf(.,
-             coords = c("decimalLongitude", "decimalLatitude"),
-             crs = 4326) %>%
-    st_intersection(., ecoreg)
-  
-  bkg_ecoreg <- ecoreg %>%
-    filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
-    st_sample(., size = no_pnts, type = "random")
-  
-  print(basename(occ_file))
-  return(bkg_ecoreg)
-}
+
 
 
 rarefyPoints <- function(ref_map, pnts) {
@@ -134,4 +119,23 @@ rarefyPoints <- function(ref_map, pnts) {
   rarefied_presence <- sp::SpatialPoints(rarefied_presence)
   sp::proj4string(rarefied_presence) <- sp::proj4string(ref_map)
   return(rarefied_presence)
+}
+
+
+
+background_sampler <- function(occ_file, no_pnts) {
+  sf_int <- read_csv(occ_file) %>%
+    dplyr::select("x", "y") %>%
+    distinct() %>%
+    st_as_sf(.,
+             coords = c("x", "y"),
+             crs = 4326) %>%
+    st_intersection(., ecoreg)
+  
+  bkg_ecoreg <- ecoreg %>%
+    filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
+    st_sample(., size = no_pnts, type = "random")
+  
+  print(basename(occ_file))
+  return(bkg_ecoreg)
 }
