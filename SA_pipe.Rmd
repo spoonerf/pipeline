@@ -234,11 +234,26 @@ mapply(ras_extract, in_file = bg_ex_in_files, out_file = bg_ex_out_files)
 ```{r}
 
 pr_in_files <-
-  list.files(here::here("environmental//presence/"),
+  list.files(here::here("environmental/presence"),
              full.names = TRUE,
              pattern = "*.csv")
 
-fitBC
+bkg_in_files <-
+  paste0(here::here("environmental/background"),
+                          "/",
+                          basename(pr_in_files))
+
+
+pr_in_files <- pr_in_files[basename(pr_in_files) %in% list.files(here::here("environmental/background"))]
+
+
+fitBC(pres_file_in = pr_in_files[2],
+           backg_file_in = bkg_in_files[2],
+           predictor_names = c(1,3,4,12),
+           predictors = env_crop,
+           filename = "test_out",
+           overwrite = FALSE,
+           threads = 4)
 
 
 ```
