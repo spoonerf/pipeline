@@ -2,6 +2,8 @@
 
 
 
+
+
 gbifData <- function(species, ext_sp, ext_occ) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(species, " ")[[1]][1]
@@ -81,26 +83,30 @@ tax_out <- function(id) {
 
 
 
-loadBioclim <- function(path, extension, extent = NULL, prjctn = NULL) {
-  bio_layers <- list.files(
-    path, pattern = paste0(extension, "$"), full.names = TRUE
-  )
-   bioclim <- raster::stack(bio_layers)
-#  bioclim <- raster::stack()    #don't think this section is needed, have replaced with the line above but maybe I'm missing something
-#  for (i in bio_layers) {
-#    bioclim <- raster::stack(bioclim, raster[i])
-#  }
-  if (!is.null(extent)) {
-    bioclim <- raster::crop(bioclim, extent)
-  }
-  if (!is.null(prjctn)) {
-    if (class(prjctn) != "CRS") {
-      stop("Projection must be an object of class CRS.")
+loadBioclim <-
+  function(path,
+           extension,
+           extent = NULL,
+           prjctn = NULL) {
+    bio_layers <- list.files(path,
+                             pattern = paste0(extension, "$"),
+                             full.names = TRUE)
+    bioclim <- raster::stack(bio_layers)
+    #  bioclim <- raster::stack()    #don't think this section is needed, have replaced with the line above but maybe I'm missing something
+    #  for (i in bio_layers) {
+    #    bioclim <- raster::stack(bioclim, raster[i])
+    #  }
+    if (!is.null(extent)) {
+      bioclim <- raster::crop(bioclim, extent)
     }
-    bioclim <- raster::projectRaster(bioclim, crs = prjctn)
+    if (!is.null(prjctn)) {
+      if (class(prjctn) != "CRS") {
+        stop("Projection must be an object of class CRS.")
+      }
+      bioclim <- raster::projectRaster(bioclim, crs = prjctn)
+    }
+    return(bioclim)
   }
-  return(bioclim)
-}
 
 
 
@@ -124,10 +130,9 @@ rarefyPoints <- function(ref_map, pnts) {
 
 
 background_sampler <- function(in_file, no_pnts, out_file) {
- 
   sp_name <- gsub(".csv", "", basename(in_file))
   
-   sf_int <- read_csv(in_file) %>%
+  sf_int <- read_csv(in_file) %>%
     dplyr::select("x", "y") %>%
     distinct() %>%
     st_as_sf(.,
@@ -141,9 +146,9 @@ background_sampler <- function(in_file, no_pnts, out_file) {
   
   tibb <- as_tibble(bkg_ecoreg)
   
-  sep_df <- tibb %>% 
-    mutate(x = unlist(map(tibb$geometry,1)),
-           y = unlist(map(tibb$geometry, 2))) %>% 
+  sep_df <- tibb %>%
+    mutate(x = unlist(map(tibb$geometry, 1)),
+           y = unlist(map(tibb$geometry, 2))) %>%
     dplyr::select(x, y)
   
   df_out <- data.frame(sp_name, sep_df)
@@ -159,38 +164,44 @@ background_sampler <- function(in_file, no_pnts, out_file) {
 
 
 
-clustEvalPa <- function(num, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod) {
-  pres_train <- pres_pts[kfolds_p != num, ]
-  pres_test <- pres_pts[kfolds_p == num, ]
-  backg_test <- backg_pts[kfolds_a == num, ]
-  if (mod == "bioclim") {
-    .m <- dismo::bioclim(curr, pres_train)
-  } else if (mod == "domain") {
-    .m <- dismo::domain(curr, pres_train)
+clustEvalPa <-
+  function(num,
+           pres_pts,
+           backg_pts,
+           kfolds_p,
+           kfolds_a,
+           curr,
+           mod) {
+    pres_train <- pres_pts[kfolds_p != num, ]
+    pres_test <- pres_pts[kfolds_p == num, ]
+    backg_test <- backg_pts[kfolds_a == num, ]
+    if (mod == "bioclim") {
+      .m <- dismo::bioclim(curr, pres_train)
+    } else if (mod == "domain") {
+      .m <- dismo::domain(curr, pres_train)
+    }
+    e <- dismo::evaluate(pres_test, backg_test, .m, curr)
+    return(e)
   }
-  e <- dismo::evaluate(pres_test, backg_test, .m, curr)
-  return(e)
-}
 
 
 getThresholds <- function(aucs) {
   thresholds <- vector(mode = "list", length = 5)
-  names(thresholds) <- c(
-    "spec_sens", "no_omission", "prevalence", "equal_sens_spec", "tss"
-  )
-  thresholds[[1]] <- sapply(
-    aucs, function(x) dismo::threshold(x, "spec_sens")
-  )
-  thresholds[[2]] <- sapply(
-    aucs, function(x) dismo::threshold(x, "no_omission")
-  )
-  thresholds[[3]] <- sapply(
-    aucs, function(x) dismo::threshold(x, "prevalence")
-  )
-  thresholds[[4]] <- sapply(
-    aucs, function(x) dismo::threshold(x, "equal_sens_spec")
-  )
-  thresholds[[5]] <- sapply(aucs, function(x) tssCalc(x))
+  names(thresholds) <- c("spec_sens",
+                         "no_omission",
+                         "prevalence",
+                         "equal_sens_spec",
+                         "tss")
+  thresholds[[1]] <- sapply(aucs, function(x)
+    dismo::threshold(x, "spec_sens"))
+  thresholds[[2]] <- sapply(aucs, function(x)
+    dismo::threshold(x, "no_omission"))
+  thresholds[[3]] <- sapply(aucs, function(x)
+    dismo::threshold(x, "prevalence"))
+  thresholds[[4]] <- sapply(aucs, function(x)
+    dismo::threshold(x, "equal_sens_spec"))
+  thresholds[[5]] <- sapply(aucs, function(x)
+    tssCalc(x))
   return(thresholds)
 }
 
@@ -199,94 +210,111 @@ tssCalc <- function(eval) {
   res <- data.frame(threshold = eval@t,
                     tss = apply(eval@confusion, 1, function(x) {
                       cm <- t(matrix(rev(x), nrow = 2))
-                      dimnames(cm) <- list(
-                        pred = c("0", "1"),
-                        obs = c("0", "1")
-                      )
+                      dimnames(cm) <- list(pred = c("0", "1"),
+                                           obs = c("0", "1"))
                       class(cm) <- "table"
                       sens <- caret::sensitivity(cm)
                       spec <- caret::specificity(cm)
                       tss <- sens + spec - 1
                       return(tss)
-                    }
-                    )
-  )
+                    }))
   thresh <- res$threshold[which.max(res$tss)]
   return(thresh)
 }
 
-fitBC <- function(pres_file_in, backg_file_in, predictor_names,predictors, filename, overwrite, threads = 4) {
-  
-  predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
-  
-  predictor_names <- paste0("CHELSA_bio10_", predictor_names)
-  
-  curr <- raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names)
-  )
-  
-  sp_name <- gsub(".csv", "",basename(pres_file_in))
-  
-  pres_pts <- read.table(pres_file_in, stringsAsFactors = FALSE, colClasses = c("NULL", rep("numeric",2), rep("NULL", 19)), sep = ",", header = TRUE)
-  
-  backg_pts <- read.table(backg_file_in, stringsAsFactors = FALSE, colClasses = c("NULL", rep("numeric",2), rep("NULL", 19)), sep = ",", header = TRUE)
-
+fitBC <-
+  function(pres_file_in,
+           backg_file_in,
+           predictor_names,
+           predictors,
+           out_dir,
+           overwrite,
+           threads = 4, 
+           eval = TRUE) {
     
-  cat("Fitting bioclim model...\n")
-  bc <- dismo::bioclim(curr, pres_pts)
-  cat("Done.\n")
-  cat("...\n")
-  cat("Evaluating bioclim model...\n")
- 
-  kfolds_p <- dismo::kfold(pres_pts, 4)
-  kfolds_a <- dismo::kfold(backg_pts, 4)
-  
-  if (.Platform$OS.type == "unix") {
-      cl <- parallel::makeForkCluster(4)
-    } else {
-      cl <- parallel::makeCluster(4)
+    predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
+    
+    predictor_names <- paste0("CHELSA_bio10_", predictor_names)
+    
+    curr <-
+      raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names))
+    
+    sp_name <- gsub(".csv", "", basename(pres_file_in))
+    
+    pres_pts <-
+      read.table(
+        pres_file_in,
+        stringsAsFactors = FALSE,
+        colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
+        sep = ",",
+        header = TRUE
+      )
+    
+    if (nrow(pres_pts) < 10){
+      
+      cat("Fewer than 10 data points - cannot fit model!")
+      
+      } else {
+      backg_pts <-
+        read.table(
+          backg_file_in,
+          stringsAsFactors = FALSE,
+          colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
+          sep = ",",
+          header = TRUE
+        )
+      
+      
+      cat("Fitting bioclim model...\n")
+      bc <- dismo::bioclim(curr, pres_pts)
+      cat("Done.\n")
+      cat("...\n")
+      cat("Evaluating bioclim model...\n")
+      
+      kfolds_p <- dismo::kfold(pres_pts, 4)
+      kfolds_a <- dismo::kfold(backg_pts, 4)
+      
+      if (.Platform$OS.type == "unix") {
+        cl <- parallel::makeForkCluster(threads)
+      } else {
+        cl <- parallel::makeCluster(threads)
+      }
+      parallel::clusterExport(
+        cl,
+        varlist = c(
+          "pres_pts",
+          "backg_pts",
+          "kfolds_p",
+          "kfolds_a",
+          "curr",
+          "clustEvalPa"
+        ),
+        envir = environment()
+      )
+      aucs <- parallel::clusterApply(cl, 1:4, function(x) {
+        clustEvalPa(x, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod = "bioclim")
+      })
+      parallel::stopCluster(cl)
+      cat("Done.\n")
+      cat("...\n")
+      thresholds <- getThresholds(aucs)
+      
+      cat("Predicting from bioclim model...\n")
+      res <- dismo::predict(curr, bc)
+      cat("Done.\n")
+      cat("...\n")
+      cat("Writing bioclim predictions...\n")
+      out_file <- paste0(sp_name, "_bioclim.tif")
+      raster::writeRaster(res,
+                          filename = paste(out_dir, out_file, sep = "/"),
+                          format = "GTiff",
+                          overwrite = overwrite)
+      gc()
+      cat("Done.\n")
+      cat("...\n")
+      if (eval) {
+        return(list(aucs = aucs, thresholds = thresholds))
+      }
+    } 
+    
   }
-    parallel::clusterExport(
-      cl, varlist = c("pres_pts","backg_pts", "kfolds_p", "kfolds_a", "curr", "clustEvalPa"),
-      envir = environment()
-    )
-    aucs <- parallel::clusterApply(cl, 1:4, function(x) {
-      clustEvalPa(x, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod = "bioclim")
-    })
-    parallel::stopCluster(cl)
-    cat("Done.\n")
-    cat("...\n")
-    thresholds <- getThresholds(aucs)
-  }
-  
-  cat("Predicting from bioclim model...\n")
-  if (.Platform$OS.type == "unix") {
-    cl <- parallel::makeForkCluster(threads)
-  } else {
-    cl <- parallel::makeCluster(threads)
-    parallel::clusterExport(
-      cl, varlist = c("predictors", "bc"), envir = environment()
-    )
-  }
-  
-  res <- parallel::clusterApply(
-    cl, 1:length(predictors), function(x) {
-      dismo::predict(predictors[[x]], bc)
-    }
-  )
-  parallel::stopCluster(cl)
-  res <- raster::stack(res)
-  names(res) <- names(predictors)
-  cat("Done.\n")
-  cat("...\n")
-  cat("Writing bioclim predictions...\n")
-  out_file <- paste0(filename, "bioclim.grd")
-  raster::writeRaster(res, filename = out_file, format = "raster",
-                      overwrite = overwrite)
-  gc()
-  cat("Done.\n")
-  cat("...\n")
-  if (eval) {
-    return(list(aucs = aucs, thresholds = thresholds))
-  }
-}
-
