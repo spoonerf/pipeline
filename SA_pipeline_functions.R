@@ -123,8 +123,11 @@ rarefyPoints <- function(ref_map, pnts) {
 
 
 
-background_sampler <- function(occ_file, no_pnts) {
-  sf_int <- read_csv(occ_file) %>%
+background_sampler <- function(occ_file, no_pnts, out_file) {
+ 
+  sp_name <- gsub(".csv", "", basename(occ_file))
+  
+   sf_int <- read_csv(occ_file) %>%
     dplyr::select("x", "y") %>%
     distinct() %>%
     st_as_sf(.,
@@ -136,6 +139,20 @@ background_sampler <- function(occ_file, no_pnts) {
     filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
     st_sample(., size = no_pnts, type = "random")
   
+  tibb <- as_tibble(bkg_ecoreg)
+  
+  sep_df <- tibb %>% 
+    mutate(x = unlist(map(tibb$geometry,1)),
+           y = unlist(map(tibb$geometry, 2))) %>% 
+    dplyr::select(x, y)
+  
+  df_out <- data.frame(sp_name, sep_df)
+  
+  write.csv(x = df_out,
+            file = paste0(out_file),
+            row.names = FALSE)
+  
   print(basename(occ_file))
-  return(bkg_ecoreg)
+  return(df_out)
 }
+
