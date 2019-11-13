@@ -159,6 +159,62 @@ background_sampler <- function(in_file, no_pnts, out_file) {
 
 
 
+clustEvalPa <- function(num, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod) {
+  pres_train <- pres_pts[kfolds_p != num, ]
+  pres_test <- pres_pts[kfolds_p == num, ]
+  backg_test <- backg_pts[kfolds_a == num, ]
+  if (mod == "bioclim") {
+    .m <- dismo::bioclim(curr, pres_train)
+  } else if (mod == "domain") {
+    .m <- dismo::domain(curr, pres_train)
+  }
+  e <- dismo::evaluate(pres_test, backg_test, .m, curr)
+  return(e)
+}
+
+
+getThresholds <- function(aucs) {
+  thresholds <- vector(mode = "list", length = 5)
+  names(thresholds) <- c(
+    "spec_sens", "no_omission", "prevalence", "equal_sens_spec", "tss"
+  )
+  thresholds[[1]] <- sapply(
+    aucs, function(x) dismo::threshold(x, "spec_sens")
+  )
+  thresholds[[2]] <- sapply(
+    aucs, function(x) dismo::threshold(x, "no_omission")
+  )
+  thresholds[[3]] <- sapply(
+    aucs, function(x) dismo::threshold(x, "prevalence")
+  )
+  thresholds[[4]] <- sapply(
+    aucs, function(x) dismo::threshold(x, "equal_sens_spec")
+  )
+  thresholds[[5]] <- sapply(aucs, function(x) tssCalc(x))
+  return(thresholds)
+}
+
+
+tssCalc <- function(eval) {
+  res <- data.frame(threshold = eval@t,
+                    tss = apply(eval@confusion, 1, function(x) {
+                      cm <- t(matrix(rev(x), nrow = 2))
+                      dimnames(cm) <- list(
+                        pred = c("0", "1"),
+                        obs = c("0", "1")
+                      )
+                      class(cm) <- "table"
+                      sens <- caret::sensitivity(cm)
+                      spec <- caret::specificity(cm)
+                      tss <- sens + spec - 1
+                      return(tss)
+                    }
+                    )
+  )
+  thresh <- res$threshold[which.max(res$tss)]
+  return(thresh)
+}
+
 fitBC <- function(pres_file_in, backg_file_in, predictor_names,predictors, filename, overwrite, threads = 4) {
   
   predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
@@ -172,7 +228,8 @@ fitBC <- function(pres_file_in, backg_file_in, predictor_names,predictors, filen
   
   pres_pts <- read.table(pres_file_in, stringsAsFactors = FALSE, colClasses = c("NULL", rep("numeric",2), rep("NULL", 19)), sep = ",", header = TRUE)
   
-  backg_pts <- 
+  backg_pts <- read.table(backg_file_in, stringsAsFactors = FALSE, colClasses = c("NULL", rep("numeric",2), rep("NULL", 19)), sep = ",", header = TRUE)
+
     
   cat("Fitting bioclim model...\n")
   bc <- dismo::bioclim(curr, pres_pts)
@@ -180,19 +237,20 @@ fitBC <- function(pres_file_in, backg_file_in, predictor_names,predictors, filen
   cat("...\n")
   cat("Evaluating bioclim model...\n")
  
-  kfolds_p <- dismo::kfold(pa_raster$combined_presence, 4)
-  kfolds_a <- dismo::kfold(pa_raster$background, 4)
-    if (.Platform$OS.type == "unix") {
+  kfolds_p <- dismo::kfold(pres_pts, 4)
+  kfolds_a <- dismo::kfold(backg_pts, 4)
+  
+  if (.Platform$OS.type == "unix") {
       cl <- parallel::makeForkCluster(4)
     } else {
       cl <- parallel::makeCluster(4)
-    }
+  }
     parallel::clusterExport(
-      cl, varlist = c("pa_raster", "kfolds_p", "kfolds_a", "curr"),
+      cl, varlist = c("pres_pts","backg_pts", "kfolds_p", "kfolds_a", "curr", "clustEvalPa"),
       envir = environment()
     )
     aucs <- parallel::clusterApply(cl, 1:4, function(x) {
-      clustEvalPa(x, pa_raster, kfolds_p, kfolds_a, curr, mod = "bioclim")
+      clustEvalPa(x, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod = "bioclim")
     })
     parallel::stopCluster(cl)
     cat("Done.\n")
