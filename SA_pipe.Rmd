@@ -91,7 +91,7 @@ Get the taxonomy of the species gathered from SANBI - if needed
 
 #gbifData(all_sp$species[1], ext = ext)
 
-spxy_out <- lapply(all_sp[1:100], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
+spxy_out <- lapply(all_sp[1:10], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
 
 sp_df <- data.frame(do.call(rbind, spxy_out))
 
@@ -129,9 +129,8 @@ rarefySpeciesPoints<-function(species){
   df <- sp_df[sp_df$species == species,]
   df_xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
   df_rar <- data.frame(species,rarefyPoints(env_crop[[1]], df_xy))
-  
+
   print(species)
-  
   return(df_rar)
   
   }
@@ -140,9 +139,10 @@ rarefySpeciesPoints<-function(species){
 rarefy_out <- lapply(unique(sp_df$species), rarefySpeciesPoints)
 #r_sp_df <- do.call(rbind, rarefy_out)
 
+#rarefy_out[sapply(rarefy_out, is.null)] <- NULL
 
 output_csv <- function(data, names){ 
-    folder_path <- here::here("occurrence")
+    folder_path <- here::here("points/presence/")
     write_csv(data, paste0(folder_path,"/", names, ".csv"))
   }
 
@@ -151,24 +151,44 @@ list(data = rarefy_out,
      purrr::pmap(output_csv) 
 
 
+###should try and filter out sp with less than 10 occurrences at this point
+
 ```
 
 
 ###Extract Data
 ```{r}
 
-sp_r_xy <- SpatialPointsDataFrame(matrix(c(sp_r_df$x, sp_r_df$y), ncol = 2), sp_r_df)
 
-ras_ext<-raster::extract(env_crop, sp_r_xy)
+occ_files <-
+  list.files(here::here("points/presence/"),
+             full.names = TRUE,
+             pattern = "*.csv")
+out_files <-
+  paste0(here::here("environmental/presence"),
+         "/",
+         basename(occ_files))
 
-pres_ext<-data.frame(sp_r_df, ras_ext)
+ras_extract <- function(occ_file, out_file) {
+  df <- vroom::vroom(occ_file)
+  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  ras_ext <- raster::extract(env_crop, xy)
+  pres_ext <- data.frame(df, ras_ext)
+  write.csv(x = pres_ext,
+            file = paste0(out_file),
+            row.names = FALSE)
+  
+}
 
+mapply(ras_extract, occ_file = occ_files, out_file = out_files)
 
 ```
 
 
 ###Background Data
 ```{r}
+
+set.seed(2237)
 
 ecoreg <-
   sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp"))
@@ -178,31 +198,35 @@ ecoreg <- ecoreg %>%
 
 occ_files <-
   list.files(
-    here::here("occurrence/"),
+    here::here("points/presence/"),
     pattern = "*.csv",
-    full.names = TRUE,
-    recursive = TRUE
+    full.names = TRUE
   )
 
+out_files <- paste0(here::here("environmental/background/"),
+         "/",
+         basename(occ_files))
 
-bg_out <- lapply(occ_files, background_sampler, no_pnts = 10000 )
-names(bg_out)<-gsub(".csv","",basename(occ_files))
 
-format_bg_points<-function(sfc_data){
-  
-  tibb <- as_tibble(sfc_data)
-  
-  sep_df <- tibb %>% 
-    mutate(x = unlist(map(tibb$geometry,1)),
-           y = unlist(map(tibb$geometry, 2))) %>% 
-    dplyr::select(x, y)
-  return(sep_df)
-}
-
-bg_out_df <- lapply(X = bg_out, FUN = format_bg_points)
-#background_sampler(occ_files[1], 10000)
-
-out_df <- dplyr::bind_rows(bg_out_df, .id = 'species')
+bg_out <- mapply(background_sampler, occ_file = occ_files ,no_pnts = 10000, out_file = out_files)
+# 
+# names(bg_out)<-gsub(".csv","",basename(occ_files))
+# 
+# format_bg_points<-function(sfc_data){
+#   
+#   tibb <- as_tibble(sfc_data)
+#   
+#   sep_df <- tibb %>% 
+#     mutate(x = unlist(map(tibb$geometry,1)),
+#            y = unlist(map(tibb$geometry, 2))) %>% 
+#     dplyr::select(x, y)
+#     return(sep_df)
+# }
+# 
+# bg_out_df <- lapply(X = bg_out, FUN = format_bg_points)
+# #background_sampler(occ_files[1], 10000)
+# 
+# out_df <- dplyr::bind_rows(bg_out_df, .id = 'species')
 
 
 bg_r_xy <- SpatialPointsDataFrame(matrix(c(out_df$x, out_df$y), ncol = 2), out_df)
