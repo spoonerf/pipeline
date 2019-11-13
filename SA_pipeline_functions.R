@@ -123,11 +123,11 @@ rarefyPoints <- function(ref_map, pnts) {
 
 
 
-background_sampler <- function(occ_file, no_pnts, out_file) {
+background_sampler <- function(in_file, no_pnts, out_file) {
  
-  sp_name <- gsub(".csv", "", basename(occ_file))
+  sp_name <- gsub(".csv", "", basename(in_file))
   
-   sf_int <- read_csv(occ_file) %>%
+   sf_int <- read_csv(in_file) %>%
     dplyr::select("x", "y") %>%
     distinct() %>%
     st_as_sf(.,
@@ -152,7 +152,83 @@ background_sampler <- function(occ_file, no_pnts, out_file) {
             file = paste0(out_file),
             row.names = FALSE)
   
-  print(basename(occ_file))
+  print(basename(in_file))
   return(df_out)
+}
+
+
+
+
+fitBC <- function(pres_file_in, backg_file_in, predictor_names,predictors, filename, overwrite, threads = 4) {
+  
+  predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
+  
+  predictor_names <- paste0("CHELSA_bio10_", predictor_names)
+  
+  curr <- raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names)
+  )
+  
+  sp_name <- gsub(".csv", "",basename(pres_file_in))
+  
+  pres_pts <- read.table(pres_file_in, stringsAsFactors = FALSE, colClasses = c("NULL", rep("numeric",2), rep("NULL", 19)), sep = ",", header = TRUE)
+  
+  backg_pts <- 
+    
+  cat("Fitting bioclim model...\n")
+  bc <- dismo::bioclim(curr, pres_pts)
+  cat("Done.\n")
+  cat("...\n")
+  cat("Evaluating bioclim model...\n")
+ 
+  kfolds_p <- dismo::kfold(pa_raster$combined_presence, 4)
+  kfolds_a <- dismo::kfold(pa_raster$background, 4)
+    if (.Platform$OS.type == "unix") {
+      cl <- parallel::makeForkCluster(4)
+    } else {
+      cl <- parallel::makeCluster(4)
+    }
+    parallel::clusterExport(
+      cl, varlist = c("pa_raster", "kfolds_p", "kfolds_a", "curr"),
+      envir = environment()
+    )
+    aucs <- parallel::clusterApply(cl, 1:4, function(x) {
+      clustEvalPa(x, pa_raster, kfolds_p, kfolds_a, curr, mod = "bioclim")
+    })
+    parallel::stopCluster(cl)
+    cat("Done.\n")
+    cat("...\n")
+    thresholds <- getThresholds(aucs)
+  }
+  
+  cat("Predicting from bioclim model...\n")
+  if (.Platform$OS.type == "unix") {
+    cl <- parallel::makeForkCluster(threads)
+  } else {
+    cl <- parallel::makeCluster(threads)
+    parallel::clusterExport(
+      cl, varlist = c("predictors", "bc"), envir = environment()
+    )
+  }
+  
+  res <- parallel::clusterApply(
+    cl, 1:length(predictors), function(x) {
+      dismo::predict(predictors[[x]], bc)
+    }
+  )
+  parallel::stopCluster(cl)
+  res <- raster::stack(res)
+  names(res) <- names(predictors)
+  cat("Done.\n")
+  cat("...\n")
+  cat("Writing bioclim predictions...\n")
+  out_file <- paste0(filename, "bioclim.grd")
+  raster::writeRaster(res, filename = out_file, format = "raster",
+                      overwrite = overwrite)
+  gc()
+  cat("Done.\n")
+  cat("...\n")
+  if (eval) {
+    return(list(aucs = aucs, thresholds = thresholds))
+  }
 }
 
