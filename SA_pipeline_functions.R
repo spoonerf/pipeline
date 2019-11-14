@@ -318,3 +318,103 @@ fitBC <-
     } 
     
   }
+
+
+fitDomain <-
+  function(pres_file_in,
+           backg_file_in,
+           predictor_names,
+           predictors,
+           out_dir,
+           overwrite,
+           threads = 4, 
+           eval = TRUE) {
+    
+    predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
+    
+    predictor_names <- paste0("CHELSA_bio10_", predictor_names)
+    
+    curr <-
+      raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names))
+    
+    sp_name <- gsub(".csv", "", basename(pres_file_in))
+    
+    pres_pts <-
+      read.table(
+        pres_file_in,
+        stringsAsFactors = FALSE,
+        colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
+        sep = ",",
+        header = TRUE
+      )
+    
+    if (nrow(pres_pts) < 10){
+      
+      cat("Fewer than 10 data points - cannot fit model!")
+      
+    } else {
+      backg_pts <-
+        read.table(
+          backg_file_in,
+          stringsAsFactors = FALSE,
+          colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
+          sep = ",",
+          header = TRUE
+        )
+      
+      
+      cat("Fitting domain model...\n")
+      dm <- dismo::domain(curr, pres_pts)
+      cat("Done.\n")
+      cat("...\n")
+      cat("Evaluating domain model...\n")
+      
+      kfolds_p <- dismo::kfold(pres_pts, 4)
+      kfolds_a <- dismo::kfold(backg_pts, 4)
+      
+      if (.Platform$OS.type == "unix") {
+        cl <- parallel::makeForkCluster(threads)
+      } else {
+        cl <- parallel::makeCluster(threads)
+      }
+      parallel::clusterExport(
+        cl,
+        varlist = c(
+          "pres_pts",
+          "backg_pts",
+          "kfolds_p",
+          "kfolds_a",
+          "curr",
+          "clustEvalPa"
+        ),
+        envir = environment()
+      )
+      aucs <- parallel::clusterApply(cl, 1:4, function(x) {
+        clustEvalPa(x, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod = "domain")
+      })
+      parallel::stopCluster(cl)
+      cat("Done.\n")
+      cat("...\n")
+      thresholds <- getThresholds(aucs)
+      
+      cat("Predicting from domain model...\n")
+      res <- dismo::predict(curr, dm)
+      cat("Done.\n")
+      cat("...\n")
+      cat("Writing domain predictions...\n")
+      out_file <- paste0(sp_name, "_domain.tif")
+      raster::writeRaster(res,
+                          filename = paste(out_dir, out_file, sep = "/"),
+                          format = "GTiff",
+                          overwrite = overwrite)
+      gc()
+      cat("Done.\n")
+      cat("...\n")
+      if (eval) {
+        return(list(aucs = aucs, thresholds = thresholds))
+      }
+    } 
+    
+  }
+
+
