@@ -1,12 +1,6 @@
 
 
 
-
-
-
-
-
-
 gbifData <- function(species, ext_sp, ext_occ) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(species, " ")[[1]][1]
@@ -314,6 +308,11 @@ fitBC <-
       cat("...\n")
       cat("Writing bioclim predictions...\n")
       out_file <- paste0(sp_name, "_bioclim.tif")
+      
+      if (!dir.exists(out_dir)) {
+        dir.create(out_dir)
+      }
+      
       raster::writeRaster(
         res,
         filename = paste(out_dir, out_file, sep = "/"),
@@ -428,3 +427,94 @@ fitGLM <-
       
     }
   }
+
+
+
+
+fitRF <-   function(sp_name,
+                    pres_dir,
+                    backg_dir,
+                    predictor_names,
+                    predictors,
+                    out_dir,
+                    overwrite,
+                    threads = 4,
+                    eval = TRUE) {
+ 
+  predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
+  
+  predictor_names <- paste0("CHELSA_bio10_", predictor_names)
+  
+  curr <-
+    raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names))
+  
+  model <-
+    stats::formula(paste("pb ~", paste(predictor_names, collapse = "+")))
+  
+  pres <-
+    data.frame(pb = 1,
+               data.table::fread(paste0(pres_dir, "/", sp_name, ".csv"), select = predictor_names))
+  
+  
+  if (nrow(pres) < 10) {
+    cat("Fewer than 10 data points - cannot fit model!")
+    
+  } else {
+    backg <-
+      data.frame(pb = 0,
+                 data.table::fread(paste0(backg_dir, "/", sp_name, ".csv"), select = predictor_names))
+    
+    sdm_set <- rbind(pres, backg)
+    
+    sdm_set<-sdm_set[complete.cases(sdm_set),]  #should remove this line and just have no NAs background data
+    
+    cat("Fitting random forest model...\n")
+    m <-
+      suppressWarnings(randomForest::randomForest(model, data = sdm_set))
+    cat("Done.\n")
+    cat("...\n")
+    if (eval) {
+      cat("Evaluating Random Forest model...\n")
+      kfolds <- dismo::kfold(sdm_set, 4)
+      if (.Platform$OS.type == "unix") {
+        cl <- parallel::makeForkCluster(4)
+      } else {
+        cl <- parallel::makeCluster(4)
+      }
+      parallel::clusterExport(cl,
+                              varlist = c("sdm_set", "kfolds", "model", "clustEvalSdm"),
+                              envir = environment())
+      aucs <- parallel::clusterApply(cl, 1:4, function(x) {
+        clustEvalSdm(x, sdm_set, kfolds, model, mod = "rf")
+      })
+      parallel::stopCluster(cl)
+      cat("Done.\n")
+      cat("...\n")
+      thresholds <- getThresholds(aucs)
+    }
+    
+    cat("Predicting from random forest...\n")
+    res <- dismo::predict(curr, m)
+    cat("Done.\n")
+    cat("...\n")
+    cat("Writing random forest predictions...\n")
+    out_file <- paste0(sp_name, "glm.tif")
+    
+    if (!dir.exists(out_dir)) {
+      dir.create(out_dir)
+    }
+    raster::writeRaster(
+      res,
+      filename = paste(out_dir, out_file, sep = "/"),
+      format = "GTiff",
+      overwrite = overwrite
+    )
+    gc()
+    cat("Done.\n")
+    cat("...\n")
+  }
+    if (eval) {
+      return(list(aucs = aucs, thresholds = thresholds))
+    }
+  }
+
