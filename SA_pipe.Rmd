@@ -303,7 +303,25 @@ lapply(
 
 ```
 
+###Fit RF
+```{r}
 
+
+lapply(
+  X = sp_names,
+  fitRF,
+  pres_dir = here::here("environmental/presence"),
+  backg_dir = here::here("environmental/background"),
+  predictor_names = c(1, 3, 4, 12),
+  predictors = env_crop,
+  out_dir = here::here("predictions/rf/"),
+  overwrite = TRUE,
+  threads = 4,
+  eval = TRUE
+)
+
+
+```
 ###Build Ensemble Model
 ```{r}
 
