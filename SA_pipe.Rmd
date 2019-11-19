@@ -242,19 +242,6 @@ sp_names <- gsub("*.csv","",list.files(here::here("environmental/presence"),
 sp_names <- sp_names[sp_names %in% gsub(".csv","",list.files(here::here("environmental/background")))]
 
 
-fitBC(
-  sp_name = sp_names[2],
-  pres_dir = here::here("environmental/presence"),
-  backg_dir = here::here("environmental/background"),
-  predictor_names = c(1, 3, 4, 12),
-  predictors = env_crop,
-  out_dir = here::here("predictions/bioclim/"),
-  overwrite = TRUE,
-  threads = 4,
-  eval = TRUE
-)
-
-
 lapply(
   X = sp_names,
   fitBC,
@@ -262,7 +249,8 @@ lapply(
   backg_dir = here::here("environmental/background"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
-  out_dir = here::here("predictions/bioclim/"),
+  pred_out_dir = here::here("predictions/bioclim/"),
+  eval_out_dir = here::here("evaluation/bioclim/"),
   overwrite = TRUE,
   threads = 4,
   eval = TRUE
@@ -275,17 +263,6 @@ lapply(
 
 ###Fit GLM
 ```{r}
-fitGLM(
-  sp_name = sp_names[2],
-  pres_dir = here::here("environmental/presence"),
-  backg_dir = here::here("environmental/background"),
-  predictor_names = c(1, 3, 4, 12),
-  predictors = env_crop,
-  out_dir = here::here("predictions/glm/"),
-  overwrite = TRUE,
-  threads = 4,
-  eval = TRUE
-)
 
 lapply(
   X = sp_names,
@@ -294,7 +271,8 @@ lapply(
   backg_dir = here::here("environmental/background"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
-  out_dir = here::here("predictions/glm/"),
+  pred_out_dir = here::here("predictions/glm/"),
+  eval_out_dir = here::here("evaluation/glm/"),
   overwrite = TRUE,
   threads = 4,
   eval = TRUE
@@ -314,7 +292,8 @@ lapply(
   backg_dir = here::here("environmental/background"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
-  out_dir = here::here("predictions/rf/"),
+  pred_out_dir = here::here("predictions/rf/"),
+  eval_out_dir = here::here("evaluation/rf/")
   overwrite = TRUE,
   threads = 4,
   eval = TRUE
@@ -322,8 +301,12 @@ lapply(
 
 
 ```
+
+
 ###Build Ensemble Model
 ```{r}
+
+
 
 ```
 
