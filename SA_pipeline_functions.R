@@ -1,6 +1,8 @@
 
 
 
+
+
 gbifData <- function(species, ext_sp, ext_occ) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(species, " ")[[1]][1]
@@ -244,7 +246,8 @@ fitBC <-
            backg_dir,
            predictor_names,
            predictors,
-           out_dir,
+           pred_out_dir,
+           eval_out_dir,
            overwrite,
            threads = 4,
            eval = TRUE) {
@@ -309,23 +312,30 @@ fitBC <-
       cat("Writing bioclim predictions...\n")
       out_file <- paste0(sp_name, "_bioclim.tif")
       
-      if (!dir.exists(out_dir)) {
-        dir.create(out_dir)
+      if (!dir.exists(pred_out_dir)) {
+        dir.create(pred_out_dir)
       }
       
       raster::writeRaster(
         res,
-        filename = paste(out_dir, out_file, sep = "/"),
+        filename = paste(pred_out_dir, out_file, sep = "/"),
         format = "GTiff",
         overwrite = overwrite
       )
       gc()
       cat("Done.\n")
       cat("...\n")
+      if (!dir.exists(eval_out_dir)) {
+        dir.create(eval_out_dir, recursive = TRUE)
+      }
+      
+      if (eval) {
+        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+        save(thresholds,
+             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      }
     }
-    if (eval) {
-      return(list(aucs = aucs, thresholds = thresholds))
-    }
+
   }
 
 
@@ -335,7 +345,8 @@ fitGLM <-
            backg_dir,
            predictor_names,
            predictors,
-           out_dir,
+           pred_out_dir,
+           eval_out_dir,
            overwrite,
            threads = 4,
            eval = TRUE) {
@@ -406,26 +417,34 @@ fitGLM <-
       cat("Done.\n")
       cat("...\n")
       cat("Writing GLM predictions...\n")
-      out_file <- paste0(sp_name, "glm.tif")
+      out_file <- paste0(sp_name, "_glm.tif")
       
-      if (!dir.exists(out_dir)) {
-        dir.create(out_dir)
+      if (!dir.exists(pred_out_dir)) {
+        dir.create(pred_out_dir, recursive = TRUE)
       }
+      
       raster::writeRaster(
         res,
-        filename = paste(out_dir, out_file, sep = "/"),
+        filename = paste(pred_out_dir, out_file, sep = "/"),
         format = "GTiff",
         overwrite = overwrite
       )
       gc()
-      cat("Done.\n\n")
+      cat("Done.\n")
       cat("...\n")
       
-    }
-    if (eval) {
-      return(list(aucs = aucs, thresholds = thresholds))
+      if (!dir.exists(eval_out_dir)) {
+        dir.create(eval_out_dir)
+      }
       
+      if (eval) {
+        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+        save(thresholds,
+             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      }
     }
+    
+    
   }
 
 
@@ -440,7 +459,6 @@ fitRF <-   function(sp_name,
                     overwrite,
                     threads = 4,
                     eval = TRUE) {
- 
   predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
   
   predictor_names <- paste0("CHELSA_bio10_", predictor_names)
@@ -466,7 +484,8 @@ fitRF <-   function(sp_name,
     
     sdm_set <- rbind(pres, backg)
     
-    sdm_set<-sdm_set[complete.cases(sdm_set),]  #should remove this line and just have no NAs background data
+    sdm_set <-
+      sdm_set[complete.cases(sdm_set),]  #should remove this line and just have no NAs background data
     
     cat("Fitting random forest model...\n")
     m <-
@@ -481,9 +500,11 @@ fitRF <-   function(sp_name,
       } else {
         cl <- parallel::makeCluster(4)
       }
-      parallel::clusterExport(cl,
-                              varlist = c("sdm_set", "kfolds", "model", "clustEvalSdm"),
-                              envir = environment())
+      parallel::clusterExport(
+        cl,
+        varlist = c("sdm_set", "kfolds", "model", "clustEvalSdm"),
+        envir = environment()
+      )
       aucs <- parallel::clusterApply(cl, 1:4, function(x) {
         clustEvalSdm(x, sdm_set, kfolds, model, mod = "rf")
       })
@@ -498,23 +519,31 @@ fitRF <-   function(sp_name,
     cat("Done.\n")
     cat("...\n")
     cat("Writing random forest predictions...\n")
-    out_file <- paste0(sp_name, "glm.tif")
+    out_file <- paste0(sp_name, "_rf.tif")
     
-    if (!dir.exists(out_dir)) {
-      dir.create(out_dir)
+    if (!dir.exists(pred_out_dir)) {
+      dir.create(pred_out_dir, recursive = TRUE)
     }
+    
     raster::writeRaster(
       res,
-      filename = paste(out_dir, out_file, sep = "/"),
+      filename = paste(pred_out_dir, out_file, sep = "/"),
       format = "GTiff",
       overwrite = overwrite
     )
     gc()
     cat("Done.\n")
     cat("...\n")
-  }
-    if (eval) {
-      return(list(aucs = aucs, thresholds = thresholds))
+    
+    if (!dir.exists(eval_out_dir)) {
+      dir.create(eval_out_dir, recursive = TRUE)
     }
+    
+    if (eval) {
+      save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+      save(thresholds,
+              file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+    }
+    
   }
-
+}
