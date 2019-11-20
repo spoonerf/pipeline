@@ -293,7 +293,7 @@ lapply(
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/rf/"),
-  eval_out_dir = here::here("evaluation/rf/")
+  eval_out_dir = here::here("evaluation/rf/"),
   overwrite = TRUE,
   threads = 4,
   eval = TRUE
