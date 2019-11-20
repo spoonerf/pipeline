@@ -10,7 +10,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r Sourcing}
-source(here::here("combine/FS","pat.R"))
+#source(here::here("combine/FS","pat.R"))
 source("SA_pipeline_functions.R")
 
 ```
