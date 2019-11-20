@@ -3,7 +3,6 @@
 
 
 
-
 gbifData <- function(species, ext_sp, ext_occ) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(species, " ")[[1]][1]
@@ -34,7 +33,7 @@ gbifData <- function(species, ext_sp, ext_occ) {
       if (all(c("lon", "lat") %in% colnames(.xx))) {
         xx <- cbind(.xx$lon, .xx$lat)
         output_data <-
-          matrix(unique(xx[complete.cases(xx),]), ncol = 2)
+          matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
         output_data <- cbind(species, output_data)
         colnames(output_data) <- c("species", "x", "y")
       } else {
@@ -62,7 +61,7 @@ tax_out <- function(id) {
                                     "order",
                                     "family",
                                     "genus",
-                                    "species"), ]
+                                    "species"),]
     
     sp_out$kingdom <- sp_out$name[sp_out$rank == "kingdom"]
     sp_out$phylum <- sp_out$name[sp_out$rank == "phylum"]
@@ -172,9 +171,9 @@ clustEvalPa <-
            kfolds_a,
            curr,
            mod) {
-    pres_train <- pres_pts[kfolds_p != num, ]
-    pres_test <- pres_pts[kfolds_p == num, ]
-    backg_test <- backg_pts[kfolds_a == num, ]
+    pres_train <- pres_pts[kfolds_p != num,]
+    pres_test <- pres_pts[kfolds_p == num,]
+    backg_test <- backg_pts[kfolds_a == num,]
     if (mod == "bioclim") {
       .m <- dismo::bioclim(curr, pres_train)
     } else if (mod == "domain") {
@@ -183,6 +182,25 @@ clustEvalPa <-
     e <- dismo::evaluate(pres_test, backg_test, .m, curr)
     return(e)
   }
+
+
+clustEvalSdm <- function(num, sdm_set, kfolds, model, mod) {
+  train <- sdm_set[kfolds != num,]
+  test_p <- sdm_set[kfolds == num & sdm_set[, "pb"] == 1,]
+  test_a <- sdm_set[kfolds == num & sdm_set[, "pb"] == 0,]
+  if (mod == "glm") {
+    .m <- stats::glm(stats::formula(model),
+                     data = train,
+                     family = binomial(link = "logit"))
+  } else if (mod == "rf") {
+    .m <-
+      suppressWarnings(randomForest::randomForest(model, data = train))
+  }
+  
+  e <- dismo::evaluate(test_p, test_a, .m)
+  e
+}
+
 
 
 getThresholds <- function(aucs) {
@@ -223,47 +241,35 @@ tssCalc <- function(eval) {
 }
 
 fitBC <-
-  function(pres_file_in,
-           backg_file_in,
+  function(sp_name,
+           pres_dir,
+           backg_dir,
            predictor_names,
            predictors,
-           out_dir,
+           pred_out_dir,
+           eval_out_dir,
            overwrite,
-           threads = 4, 
+           threads = 4,
            eval = TRUE) {
+    print(sp_name)
     
-    predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
+    predictor_names <-
+      stringr::str_pad(predictor_names, 2, pad = "0")
     
-    predictor_names <- paste0("CHELSA_bio10_", predictor_names)
+    CHELSA_predictor_names <-
+      paste0("CHELSA_bio10_", predictor_names)
     
     curr <-
-      raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names))
-    
-    sp_name <- gsub(".csv", "", basename(pres_file_in))
+      raster::dropLayer(predictors, which(!names(predictors) %in% CHELSA_predictor_names))
     
     pres_pts <-
-      read.table(
-        pres_file_in,
-        stringsAsFactors = FALSE,
-        colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
-        sep = ",",
-        header = TRUE
-      )
+      as.matrix(data.table::fread(paste0(pres_dir, "/", sp_name, ".csv"), select = c("x", "y")), ncol = 2)
     
-    if (nrow(pres_pts) < 10){
-      
+    if (nrow(pres_pts) < 10) {
       cat("Fewer than 10 data points - cannot fit model!")
-      
-      } else {
+    } else {
       backg_pts <-
-        read.table(
-          backg_file_in,
-          stringsAsFactors = FALSE,
-          colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
-          sep = ",",
-          header = TRUE
-        )
-      
+        as.matrix(data.table::fread(paste0(backg_dir, "/", sp_name, ".csv"), select = c("x", "y")))
       
       cat("Fitting bioclim model...\n")
       bc <- dismo::bioclim(curr, pres_pts)
@@ -305,31 +311,45 @@ fitBC <-
       cat("...\n")
       cat("Writing bioclim predictions...\n")
       out_file <- paste0(sp_name, "_bioclim.tif")
-      raster::writeRaster(res,
-                          filename = paste(out_dir, out_file, sep = "/"),
-                          format = "GTiff",
-                          overwrite = overwrite)
+      
+      if (!dir.exists(pred_out_dir)) {
+        dir.create(pred_out_dir)
+      }
+      
+      raster::writeRaster(
+        res,
+        filename = paste(pred_out_dir, out_file, sep = "/"),
+        format = "GTiff",
+        overwrite = overwrite
+      )
       gc()
       cat("Done.\n")
       cat("...\n")
-      if (eval) {
-        return(list(aucs = aucs, thresholds = thresholds))
+      if (!dir.exists(eval_out_dir)) {
+        dir.create(eval_out_dir, recursive = TRUE)
       }
-    } 
-    
+      
+      if (eval) {
+        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+        save(thresholds,
+             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      }
+    }
+
   }
 
 
-fitDomain <-
-  function(pres_file_in,
-           backg_file_in,
+fitGLM <-
+  function(sp_name,
+           pres_dir,
+           backg_dir,
            predictor_names,
            predictors,
-           out_dir,
+           pred_out_dir,
+           eval_out_dir,
            overwrite,
-           threads = 4, 
+           threads = 4,
            eval = TRUE) {
-    
     predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
     
     predictor_names <- paste0("CHELSA_bio10_", predictor_names)
@@ -337,84 +357,194 @@ fitDomain <-
     curr <-
       raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names))
     
-    sp_name <- gsub(".csv", "", basename(pres_file_in))
+    model <-
+      stats::formula(paste("pb ~", paste(predictor_names, collapse = "+")))
     
-    pres_pts <-
-      read.table(
-        pres_file_in,
-        stringsAsFactors = FALSE,
-        colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
-        sep = ",",
-        header = TRUE
-      )
+    pres <-
+      data.frame(pb = 1,
+                 data.table::fread(paste0(pres_dir, "/", sp_name, ".csv"), select = predictor_names))
     
-    if (nrow(pres_pts) < 10){
-      
+    
+    if (nrow(pres) < 10) {
       cat("Fewer than 10 data points - cannot fit model!")
       
     } else {
-      backg_pts <-
-        read.table(
-          backg_file_in,
-          stringsAsFactors = FALSE,
-          colClasses = c("NULL", rep("numeric", 2), rep("NULL", 19)),
-          sep = ",",
-          header = TRUE
-        )
+      backg <-
+        data.frame(pb = 0,
+                   data.table::fread(paste0(backg_dir, "/", sp_name, ".csv"), select = predictor_names))
       
+      sdm_set <- rbind(pres, backg)
       
-      cat("Fitting domain model...\n")
-      dm <- dismo::domain(curr, pres_pts)
+      cat("Fitting GLM...\n")
+      m <- stats::glm(stats::formula(model),
+                      data = sdm_set,
+                      family = binomial(link = "logit"))
       cat("Done.\n")
       cat("...\n")
-      cat("Evaluating domain model...\n")
+      if (eval) {
+        cat("Evaluating GLM...\n")
+        kfolds <- dismo::kfold(sdm_set, 4)
+        if (.Platform$OS.type == "unix") {
+          cl <- parallel::makeForkCluster(4)
+        } else {
+          cl <- parallel::makeCluster(4)
+          parallel::clusterExport(
+            cl,
+            varlist = c("sdm_set", "kfolds", "model", "clustEvalSdm"),
+            envir = environment()
+          )
+          parallel::clusterCall(cl, function()
+            library(dismo))
+        }
+        aucs <- parallel::clusterApply(cl, 1:4, function(x) {
+          clustEvalSdm(x, sdm_set, kfolds, model, mod = "glm")
+        })
+        parallel::stopCluster(cl)
+        cat("Done.\n")
+        cat("...\n")
+        thresholds <- getThresholds(aucs)
+      }
       
-      kfolds_p <- dismo::kfold(pres_pts, 4)
-      kfolds_a <- dismo::kfold(backg_pts, 4)
+      cat("Predicting from GLM...\n")
+      res <- dismo::predict(curr, m)
+      res <-
+        raster:::calc(
+          res,
+          fun = function(x) {
+            exp(x) / (1 + exp(x))
+          }
+        ) #backtransforming from logit space
+      cat("Done.\n")
+      cat("...\n")
+      cat("Writing GLM predictions...\n")
+      out_file <- paste0(sp_name, "_glm.tif")
       
+      if (!dir.exists(pred_out_dir)) {
+        dir.create(pred_out_dir, recursive = TRUE)
+      }
+      
+      raster::writeRaster(
+        res,
+        filename = paste(pred_out_dir, out_file, sep = "/"),
+        format = "GTiff",
+        overwrite = overwrite
+      )
+      gc()
+      cat("Done.\n")
+      cat("...\n")
+      
+      if (!dir.exists(eval_out_dir)) {
+        dir.create(eval_out_dir)
+      }
+      
+      if (eval) {
+        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+        save(thresholds,
+             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      }
+    }
+    
+    
+  }
+
+
+
+
+fitRF <-   function(sp_name,
+                    pres_dir,
+                    backg_dir,
+                    predictor_names,
+                    predictors,
+                    pred_out_dir,
+                    eval_out_dir,
+                    overwrite,
+                    threads = 4,
+                    eval = TRUE) {
+  predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
+  
+  predictor_names <- paste0("CHELSA_bio10_", predictor_names)
+  
+  curr <-
+    raster::dropLayer(predictors, which(!names(predictors) %in% predictor_names))
+  
+  model <-
+    stats::formula(paste("pb ~", paste(predictor_names, collapse = "+")))
+  
+  pres <-
+    data.frame(pb = 1,
+               data.table::fread(paste0(pres_dir, "/", sp_name, ".csv"), select = predictor_names))
+  
+  
+  if (nrow(pres) < 10) {
+    cat("Fewer than 10 data points - cannot fit model!")
+    
+  } else {
+    backg <-
+      data.frame(pb = 0,
+                 data.table::fread(paste0(backg_dir, "/", sp_name, ".csv"), select = predictor_names))
+    
+    sdm_set <- rbind(pres, backg)
+    
+    sdm_set <-
+      sdm_set[complete.cases(sdm_set),]  #should remove this line and just have no NAs background data
+    
+    cat("Fitting random forest model...\n")
+    m <-
+      suppressWarnings(randomForest::randomForest(model, data = sdm_set))
+    cat("Done.\n")
+    cat("...\n")
+    if (eval) {
+      cat("Evaluating Random Forest model...\n")
+      kfolds <- dismo::kfold(sdm_set, 4)
       if (.Platform$OS.type == "unix") {
-        cl <- parallel::makeForkCluster(threads)
+        cl <- parallel::makeForkCluster(4)
       } else {
-        cl <- parallel::makeCluster(threads)
+        cl <- parallel::makeCluster(4)
       }
       parallel::clusterExport(
         cl,
-        varlist = c(
-          "pres_pts",
-          "backg_pts",
-          "kfolds_p",
-          "kfolds_a",
-          "curr",
-          "clustEvalPa"
-        ),
+        varlist = c("sdm_set", "kfolds", "model", "clustEvalSdm"),
         envir = environment()
       )
       aucs <- parallel::clusterApply(cl, 1:4, function(x) {
-        clustEvalPa(x, pres_pts, backg_pts, kfolds_p, kfolds_a, curr, mod = "domain")
+        clustEvalSdm(x, sdm_set, kfolds, model, mod = "rf")
       })
       parallel::stopCluster(cl)
       cat("Done.\n")
       cat("...\n")
       thresholds <- getThresholds(aucs)
-      
-      cat("Predicting from domain model...\n")
-      res <- dismo::predict(curr, dm)
-      cat("Done.\n")
-      cat("...\n")
-      cat("Writing domain predictions...\n")
-      out_file <- paste0(sp_name, "_domain.tif")
-      raster::writeRaster(res,
-                          filename = paste(out_dir, out_file, sep = "/"),
-                          format = "GTiff",
-                          overwrite = overwrite)
-      gc()
-      cat("Done.\n")
-      cat("...\n")
-      if (eval) {
-        return(list(aucs = aucs, thresholds = thresholds))
-      }
-    } 
+    }
+    
+    cat("Predicting from random forest...\n")
+    res <- dismo::predict(curr, m)
+    cat("Done.\n")
+    cat("...\n")
+    cat("Writing random forest predictions...\n")
+    out_file <- paste0(sp_name, "_rf.tif")
+    
+    if (!dir.exists(pred_out_dir)) {
+      dir.create(pred_out_dir, recursive = TRUE)
+    }
+    
+    raster::writeRaster(
+      res,
+      filename = paste(pred_out_dir, out_file, sep = "/"),
+      format = "GTiff",
+      overwrite = overwrite
+    )
+    gc()
+    cat("Done.\n")
+    cat("...\n")
+    
+    if (!dir.exists(eval_out_dir)) {
+      dir.create(eval_out_dir, recursive = TRUE)
+    }
+    
+    if (eval) {
+      save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+      save(thresholds,
+              file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+    }
     
   }
-
-
+}
