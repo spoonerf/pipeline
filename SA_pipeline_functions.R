@@ -153,13 +153,13 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
   
   in_file <- list.files(in_dir, full.names = TRUE)[grepl(sp_name, list.files(in_dir))]
   
-  sf_int <- read_csv(in_file) %>%
+  sf_int <- read_csv(paste0(in_dir, "/", sp_name, ".csv")) %>%
     dplyr::select("x", "y") %>%
-    distinct() %>%
-    st_as_sf(.,
+    dplyr::distinct() %>%
+    sf::st_as_sf(.,
              coords = c("x", "y"),
              crs = 4326) %>%
-    st_intersection(., polygon)
+    sf::st_intersection(., polygon)
   
   bkg_polygon <- polygon %>%
     dplyr::filter(ECO_NAME %in% sf_int$ECO_NAME)
