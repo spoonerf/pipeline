@@ -85,18 +85,6 @@ all_sp<-c(g_sp$species, s_sp)
 
 ``` 
 
-Get the taxonomy of the species gathered from SANBI - if needed 
-
-```{r, eval = FALSE}
-# 
-# tr_out<-lapply(s_sp[1:10], tax_out)
-# 
-# san_df<-do.call(rbind, tr_out)
-# 
-# all_sp<-rbind(g_sp, san_df)
-
-```
-
 ```{r Downloading data from GBIF and cleaning it before outputting}
 
 #gbifData(all_sp$species[1], ext = ext)
@@ -112,7 +100,6 @@ sp_df$y <- as.numeric(as.character(sp_df$y))
 ```
 
 
-
 ##Coordinate Cleaner
 ```{r}
 
@@ -121,9 +108,6 @@ sp_cc <- clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
 sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
 
 ```
-
-
-
 
 
 ###Rarefy Points
@@ -188,19 +172,13 @@ ecoreg <-
 ecoreg <- ecoreg %>%
   dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
 
-bg_in_files <-
-  list.files(
-    here::here("points/presence/"),
-    pattern = "*.csv",
-    full.names = TRUE
-  )
-
-bg_out_files <- paste0(here::here("points/background/"),
-         "/",
-         basename(bg_in_files))
+background_sampler(sp_name = sp_name, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 10, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
 
-mapply(background_sampler, in_file = bg_in_files[2], no_pnts = 10000, out_file = bg_out_files[2])
+lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
+
+lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/pseudoabsence/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
+
 
 ```
 
@@ -233,7 +211,7 @@ sp_names <- sp_names[sp_names %in% gsub(".csv","",list.files(here::here("environ
 
 
 lapply(
-  X = sp_names[2],
+  X = sp_names,
   fitBC,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/background"),
@@ -255,7 +233,7 @@ lapply(
 ```{r}
 
 lapply(
-  X = sp_names[2],
+  X = sp_names,
   fitGLM,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/background"),
@@ -276,7 +254,7 @@ lapply(
 
 
 lapply(
-  X = sp_names[2],
+  X = sp_names,
   fitRF,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/background"),
@@ -296,45 +274,73 @@ lapply(
 ###Get Evaluations and AUCs
 ```{r}
 
-sp_name <- "Bitis_arietans"   
+eval_files <-
+  list.files(
+    here::here("evaluation/"),
+    full.names = TRUE,
+    recursive = TRUE,
+    pattern = "*eval")
+  # )[grepl(sp_name,
+  #         list.files(
+  #           here::here("evaluation/"),
+  #           full.names = TRUE,
+  #           recursive = TRUE,
+  #           pattern = "*eval"
+  #         ))]
 
-eval_files <-  list.files(here::here("evaluation/"), full.names = TRUE, recursive = TRUE, pattern = "*eval")[grepl(sp_name, list.files(here::here("evaluation/"), full.names = TRUE, recursive = TRUE,pattern = "*eval"))]
-
-eval_mean <- function(eval_file, threshold = "tss"){
-  
+eval_mean <- function(eval_file, threshold = "tss") {
   load(eval_file)
   model <- evals$model
   species <- evals$sp_name
+  aucs <- mean(sapply(evals$aucs, function(x)
+    x@auc))
   
-  aucs <- mean(sapply(evals$aucs, function(x) x@auc))
-
-  if (model == "glm"){
-  thresholds  <- mean(exp(evals$thresholds[[threshold]])/(1 + exp(evals$thresholds[[threshold]])))
+  if (model == "glm") {
+    thresholds  <-
+      mean(exp(evals$thresholds[[threshold]]) / (1 + exp(evals$thresholds[[threshold]])))
   } else {
-  thresholds  <- mean(evals$thresholds[[threshold]])
+    thresholds  <- mean(evals$thresholds[[threshold]])
   }
-
-  df_out <- data.frame(sp_name = sp_name,model = model, auc = aucs, threshold = thresholds)
+  
+  df_out <-
+    data.frame(
+      sp_name = species,
+      model = model,
+      auc = aucs,
+      threshold = thresholds
+    )
   return(df_out)
-  }
-
-eval_mean(eval_files[[1]], threshold = "tss")
+}
 
 evals_out <- lapply(eval_files, eval_mean, threshold = "tss")
 
-
 ```
+
 ###Build Ensemble Model
 ```{r}
 
-preds <- list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE)[grepl(sp_name, list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE))]
+preds <- list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE)
+
+
+function(evals, preds){
+  
+  
+}
 preds <- stack(preds)
+
   
 
 # pred <- raster::subset(preds, subset = layer_name)
   # 
   # pa <- pred >= thresholds
   # 
+
+```
+
+
+###Land Use Masking?
+```{R}
+
 
 ```
 
