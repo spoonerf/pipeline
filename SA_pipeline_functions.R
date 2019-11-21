@@ -81,6 +81,17 @@ tax_out <- function(id) {
 }
 
 
+ras_extract <- function(in_file, out_file) {
+  df <- vroom::vroom(in_file)
+  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  ras_ext <- raster::extract(env_crop, xy)
+  pres_ext <- data.frame(df, ras_ext)
+  write.csv(x = pres_ext,
+            file = paste0(out_file),
+            row.names = FALSE)
+  
+}
+
 
 loadBioclim <-
   function(path,
@@ -146,8 +157,8 @@ background_sampler <- function(in_file, no_pnts, out_file) {
   tibb <- as_tibble(bkg_ecoreg)
   
   sep_df <- tibb %>%
-    mutate(x = unlist(map(tibb$geometry, 1)),
-           y = unlist(map(tibb$geometry, 2))) %>%
+    mutate(x = unlist(purrr::map(tibb$geometry, 1)),
+           y = unlist(purrr::map(tibb$geometry, 2))) %>%
     dplyr::select(x, y)
   
   df_out <- data.frame(sp_name, sep_df)
@@ -251,6 +262,7 @@ fitBC <-
            overwrite,
            threads = 4,
            eval = TRUE) {
+    
     print(sp_name)
     
     predictor_names <-
@@ -330,9 +342,11 @@ fitBC <-
       }
       
       if (eval) {
-        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-        save(thresholds,
-             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+        evals = list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))      
+        #save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+        #save(thresholds,
+        #        file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
       }
     }
 
@@ -350,6 +364,8 @@ fitGLM <-
            overwrite,
            threads = 4,
            eval = TRUE) {
+    print(sp_name)
+    
     predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
     
     predictor_names <- paste0("CHELSA_bio10_", predictor_names)
@@ -438,9 +454,11 @@ fitGLM <-
       }
       
       if (eval) {
-        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-        save(thresholds,
-             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+        evals = list(sp_name = sp_name, model = "glm",aucs = aucs, thresholds = thresholds)
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_glm_eval.RDA"))      
+        #save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+        #save(thresholds,
+        #        file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
       }
     }
     
@@ -460,6 +478,8 @@ fitRF <-   function(sp_name,
                     overwrite,
                     threads = 4,
                     eval = TRUE) {
+  print(sp_name)
+  
   predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
   
   predictor_names <- paste0("CHELSA_bio10_", predictor_names)
@@ -541,9 +561,12 @@ fitRF <-   function(sp_name,
     }
     
     if (eval) {
-      save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-      save(thresholds,
-              file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      
+      evals = list(sp_name = sp_name, model = "rf", aucs = aucs, thresholds = thresholds)
+      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_rf_eval.RDA"))      
+      #save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
+      #save(thresholds,
+      #        file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
     }
     
   }
