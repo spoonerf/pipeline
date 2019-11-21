@@ -101,7 +101,7 @@ Get the taxonomy of the species gathered from SANBI - if needed
 
 #gbifData(all_sp$species[1], ext = ext)
 
-spxy_out <- lapply(all_sp[1:10], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
+spxy_out <- lapply(all_sp[14], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
 
 sp_df <- data.frame(do.call(rbind, spxy_out))
 
@@ -172,16 +172,6 @@ pr_out_files <-
          "/",
          basename(pr_in_files))
 
-ras_extract <- function(in_file, out_file) {
-  df <- vroom::vroom(in_file)
-  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
-  ras_ext <- raster::extract(env_crop, xy)
-  pres_ext <- data.frame(df, ras_ext)
-  write.csv(x = pres_ext,
-            file = paste0(out_file),
-            row.names = FALSE)
-  
-}
 
 mapply(ras_extract, in_file = pr_in_files, out_file = pr_out_files)
 
@@ -210,7 +200,7 @@ bg_out_files <- paste0(here::here("points/background/"),
          basename(bg_in_files))
 
 
-mapply(background_sampler, in_file = bg_in_files ,no_pnts = 10000, out_file = bg_out_files)
+mapply(background_sampler, in_file = bg_in_files[2], no_pnts = 10000, out_file = bg_out_files[2])
 
 ```
 
@@ -243,7 +233,7 @@ sp_names <- sp_names[sp_names %in% gsub(".csv","",list.files(here::here("environ
 
 
 lapply(
-  X = sp_names,
+  X = sp_names[2],
   fitBC,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/background"),
@@ -265,7 +255,7 @@ lapply(
 ```{r}
 
 lapply(
-  X = sp_names,
+  X = sp_names[2],
   fitGLM,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/background"),
@@ -286,7 +276,7 @@ lapply(
 
 
 lapply(
-  X = sp_names,
+  X = sp_names[2],
   fitRF,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/background"),
@@ -303,13 +293,50 @@ lapply(
 ```
 
 
-###Build Ensemble Model
+###Get Evaluations and AUCs
 ```{r}
 
+sp_name <- "Bitis_arietans"   
+
+eval_files <-  list.files(here::here("evaluation/"), full.names = TRUE, recursive = TRUE, pattern = "*eval")[grepl(sp_name, list.files(here::here("evaluation/"), full.names = TRUE, recursive = TRUE,pattern = "*eval"))]
+
+eval_mean <- function(eval_file, threshold = "tss"){
+  
+  load(eval_file)
+  model <- evals$model
+  species <- evals$sp_name
+  
+  aucs <- mean(sapply(evals$aucs, function(x) x@auc))
+
+  if (model == "glm"){
+  thresholds  <- mean(exp(evals$thresholds[[threshold]])/(1 + exp(evals$thresholds[[threshold]])))
+  } else {
+  thresholds  <- mean(evals$thresholds[[threshold]])
+  }
+
+  df_out <- data.frame(sp_name = sp_name,model = model, auc = aucs, threshold = thresholds)
+  return(df_out)
+  }
+
+eval_mean(eval_files[[1]], threshold = "tss")
+
+evals_out <- lapply(eval_files, eval_mean, threshold = "tss")
 
 
 ```
+###Build Ensemble Model
+```{r}
 
+preds <- list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE)[grepl(sp_name, list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE))]
+preds <- stack(preds)
+  
+
+# pred <- raster::subset(preds, subset = layer_name)
+  # 
+  # pa <- pred >= thresholds
+  # 
+
+```
 
 ###Predict Forward
 ```{r}
