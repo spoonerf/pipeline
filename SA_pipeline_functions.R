@@ -138,9 +138,20 @@ rarefyPoints <- function(ref_map, pnts) {
 }
 
 
+####
+###@dens_abs - whether you want to use sampling based on density or an absolute number e.g. 10000
+###@density - what that density is in terms of per km. e.g. 1000 would be 1 point per 1000km2
+###@no_pnts - number of points if using an absolute number
+###@type - type of points to use, either background or pseudoabsence. Background will distribute points randomly across the polygons in which points fall. 
+### Pseudo-absence will also do this but exclude points less than @buffer km from a presence point
+###@buffer - the size of the buffer used in type = "pseudoabsence"
+###@polygon - the polygon shapefile used as the background - here we use ecoregions but could be any shapefile with multiple polygons
 
-background_sampler <- function(in_file, no_pnts, out_file) {
-  sp_name <- gsub(".csv", "", basename(in_file))
+background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute", 
+                               density = NULL, no_pnts = NULL, type = "background", buffer = NULL, polygon = NULL) 
+{
+  
+  in_file <- list.files(in_dir, full.names = TRUE)[grepl(sp_name, list.files(in_dir))]
   
   sf_int <- read_csv(in_file) %>%
     dplyr::select("x", "y") %>%
@@ -148,13 +159,34 @@ background_sampler <- function(in_file, no_pnts, out_file) {
     st_as_sf(.,
              coords = c("x", "y"),
              crs = 4326) %>%
-    st_intersection(., ecoreg)
+    st_intersection(., polygon)
   
-  bkg_ecoreg <- ecoreg %>%
-    filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
-    st_sample(., size = no_pnts, type = "random")
+  bkg_polygon <- polygon %>%
+    dplyr::filter(ECO_NAME %in% sf_int$ECO_NAME)
   
-  tibb <- as_tibble(bkg_ecoreg)
+  if (dens_abs == "density"){
+    no_pnts <- round(as.numeric(sum(st_area(bkg_polygon)))/(1000000*density))   
+  }
+  
+  if (type == "background"){
+    points_out <- bkg_polygon %>% 
+      sf::st_sample(., size = no_pnts, type = "random")  
+  }
+  
+  if (type == "pseudoabsence"){
+    
+    diss_bkg_polygon <- sf::st_union(bkg_polygon)
+    sf_int_trans <- st_transform(sf_int, 54030) #robinson projection
+    buff_pnts <- sf::st_buffer(sf_int_trans, buffer*1000)  
+    buff_pnts <- st_transform(buff_pnts, 4326)
+    buff_pnts <- sf::st_union(buff_pnts)
+    diff_bkg_polygon <- sf::st_difference(diss_bkg_polygon, buff_pnts)  
+    points_out <- diff_bkg_polygon %>% 
+      sf::st_sample(., size = no_pnts, type = "random")
+    
+  }
+  
+  tibb <- as_tibble(points_out)
   
   sep_df <- tibb %>%
     mutate(x = unlist(purrr::map(tibb$geometry, 1)),
@@ -164,13 +196,12 @@ background_sampler <- function(in_file, no_pnts, out_file) {
   df_out <- data.frame(sp_name, sep_df)
   
   write.csv(x = df_out,
-            file = paste0(out_file),
+            file = paste0(out_dir, "/", sp_name, ".csv"),
             row.names = FALSE)
   
   print(basename(in_file))
   return(df_out)
 }
-
 
 
 
@@ -342,12 +373,12 @@ fitBC <-
       }
       
       if (eval) {
-        evals = list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
-        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))      
-        #save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-        #save(thresholds,
-        #        file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
-      }
+        evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+        #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
+        #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
+      
+        }
     }
 
   }
@@ -454,11 +485,8 @@ fitGLM <-
       }
       
       if (eval) {
-        evals = list(sp_name = sp_name, model = "glm",aucs = aucs, thresholds = thresholds)
-        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_glm_eval.RDA"))      
-        #save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-        #save(thresholds,
-        #        file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+        evals = data.frame(sp_name = sp_name, model = "glm",aucs = aucs, thresholds = thresholds)
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_glm_eval.csv"))      
       }
     }
     
@@ -562,11 +590,8 @@ fitRF <-   function(sp_name,
     
     if (eval) {
       
-      evals = list(sp_name = sp_name, model = "rf", aucs = aucs, thresholds = thresholds)
-      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_rf_eval.RDA"))      
-      #save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-      #save(thresholds,
-      #        file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      evals = data.frame(sp_name = sp_name, model = "rf", aucs = aucs, thresholds = thresholds)
+      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_rf_eval.csv"))      
     }
     
   }
