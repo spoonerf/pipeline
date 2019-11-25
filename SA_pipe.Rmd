@@ -165,15 +165,15 @@ mapply(ras_extract, in_file = pr_in_files, out_file = pr_out_files)
 ###Background Data
 ```{r}
 
+sp_names <- gsub("*.csv","",list.files(here::here("points/presence"),
+              pattern = "*.csv"))
+
 
 ecoreg <-
   sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp"))
 
 ecoreg <- ecoreg %>%
   dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
-
-background_sampler(sp_name = sp_name, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 10, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
-
 
 lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
@@ -184,8 +184,6 @@ lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/")
 
 
 ```{r}
-
-
 bg_ex_in_files <- list.files(here::here("points/background/"),
                              pattern = "*.csv",
                              full.names = TRUE)
@@ -194,8 +192,17 @@ bg_ex_out_files <- paste0(here::here("environmental/background/"),
                           "/",
                           basename(bg_ex_in_files))
 
+ps_ex_in_files <- list.files(here::here("points/pseudoabsence/"),
+                             pattern = "*.csv",
+                             full.names = TRUE)
+
+ps_ex_out_files <-
+  paste0(here::here("environmental/pseudoabsence/"),
+         "/",
+         basename(bg_ex_in_files))
 
 mapply(ras_extract, in_file = bg_ex_in_files, out_file = bg_ex_out_files)
+mapply(ras_extract, in_file = ps_ex_in_files, out_file = ps_ex_out_files)
 
 ```
 
@@ -257,7 +264,7 @@ lapply(
   X = sp_names,
   fitRF,
   pres_dir = here::here("environmental/presence"),
-  backg_dir = here::here("environmental/background"),
+  backg_dir = here::here("environmental/pseudoabsence/"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/rf/"),
