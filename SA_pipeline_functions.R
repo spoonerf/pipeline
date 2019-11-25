@@ -86,6 +86,7 @@ ras_extract <- function(in_file, out_file) {
   xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
   ras_ext <- raster::extract(env_crop, xy)
   pres_ext <- data.frame(df, ras_ext)
+  pres_ext <- pres_ext[complete.cases(pres_ext),]
   write.csv(x = pres_ext,
             file = paste0(out_file),
             row.names = FALSE)
@@ -178,7 +179,7 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
     diss_bkg_polygon <- sf::st_union(bkg_polygon)
     sf_int_trans <- st_transform(sf_int, 54030) #robinson projection
     buff_pnts <- sf::st_buffer(sf_int_trans, buffer*1000)  
-    buff_pnts <- st_transform(buff_pnts, 4326)
+    buff_pnts <- st_transform(buff_pnts, 4326) #should maybe get the original crs and have that here instead
     buff_pnts <- sf::st_union(buff_pnts)
     diff_bkg_polygon <- sf::st_difference(diss_bkg_polygon, buff_pnts)  
     points_out <- diff_bkg_polygon %>% 
@@ -467,7 +468,7 @@ fitGLM <-
       out_file <- paste0(sp_name, "_glm.tif")
       
       if (!dir.exists(pred_out_dir)) {
-        dir.create(pred_out_dir, recursive = TRUE)
+        dir.create(pred_out_dir)
       }
       
       raster::writeRaster(
@@ -479,14 +480,16 @@ fitGLM <-
       gc()
       cat("Done.\n")
       cat("...\n")
-      
       if (!dir.exists(eval_out_dir)) {
-        dir.create(eval_out_dir)
+        dir.create(eval_out_dir, recursive = TRUE)
       }
       
       if (eval) {
-        evals = data.frame(sp_name = sp_name, model = "glm",aucs = aucs, thresholds = thresholds)
-        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_glm_eval.csv"))      
+        evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+        #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
+        #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
+        
       }
     }
     
@@ -571,7 +574,7 @@ fitRF <-   function(sp_name,
     out_file <- paste0(sp_name, "_rf.tif")
     
     if (!dir.exists(pred_out_dir)) {
-      dir.create(pred_out_dir, recursive = TRUE)
+      dir.create(pred_out_dir)
     }
     
     raster::writeRaster(
@@ -583,16 +586,16 @@ fitRF <-   function(sp_name,
     gc()
     cat("Done.\n")
     cat("...\n")
-    
     if (!dir.exists(eval_out_dir)) {
       dir.create(eval_out_dir, recursive = TRUE)
     }
     
     if (eval) {
+      evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+      #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
+      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
+      #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
       
-      evals = data.frame(sp_name = sp_name, model = "rf", aucs = aucs, thresholds = thresholds)
-      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_rf_eval.csv"))      
     }
-    
   }
 }
