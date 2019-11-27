@@ -81,6 +81,18 @@ tax_out <- function(id) {
 }
 
 
+ras_extract <- function(in_file, out_file) {
+  df <- vroom::vroom(in_file)
+  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  ras_ext <- raster::extract(env_crop, xy)
+  pres_ext <- data.frame(df, ras_ext)
+  pres_ext <- pres_ext[complete.cases(pres_ext),]
+  write.csv(x = pres_ext,
+            file = paste0(out_file),
+            row.names = FALSE)
+  
+}
+
 
 loadBioclim <-
   function(path,
@@ -127,39 +139,70 @@ rarefyPoints <- function(ref_map, pnts) {
 }
 
 
+####
+###@dens_abs - whether you want to use sampling based on density or an absolute number e.g. 10000
+###@density - what that density is in terms of per km. e.g. 1000 would be 1 point per 1000km2
+###@no_pnts - number of points if using an absolute number
+###@type - type of points to use, either background or pseudoabsence. Background will distribute points randomly across the polygons in which points fall. 
+### Pseudo-absence will also do this but exclude points less than @buffer km from a presence point
+###@buffer - the size of the buffer used in type = "pseudoabsence"
+###@polygon - the polygon shapefile used as the background - here we use ecoregions but could be any shapefile with multiple polygons
 
-background_sampler <- function(in_file, no_pnts, out_file) {
-  sp_name <- gsub(".csv", "", basename(in_file))
+background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute", 
+                               density = NULL, no_pnts = NULL, type = "background", buffer = NULL, polygon = NULL) 
+{
   
-  sf_int <- read_csv(in_file) %>%
+  in_file <- list.files(in_dir, full.names = TRUE)[grepl(sp_name, list.files(in_dir))]
+  
+  sf_int <- read_csv(paste0(in_dir, "/", sp_name, ".csv")) %>%
     dplyr::select("x", "y") %>%
-    distinct() %>%
-    st_as_sf(.,
+    dplyr::distinct() %>%
+    sf::st_as_sf(.,
              coords = c("x", "y"),
              crs = 4326) %>%
-    st_intersection(., ecoreg)
+    sf::st_intersection(., polygon)
   
-  bkg_ecoreg <- ecoreg %>%
-    filter(ECO_NAME %in% sf_int$ECO_NAME) %>%
-    st_sample(., size = no_pnts, type = "random")
+  bkg_polygon <- polygon %>%
+    dplyr::filter(ECO_NAME %in% sf_int$ECO_NAME)
   
-  tibb <- as_tibble(bkg_ecoreg)
+  if (dens_abs == "density"){
+    no_pnts <- round(as.numeric(sum(st_area(bkg_polygon)))/(1000000*density))   
+  }
+  
+  if (type == "background"){
+    points_out <- bkg_polygon %>% 
+      sf::st_sample(., size = no_pnts, type = "random")  
+  }
+  
+  if (type == "pseudoabsence"){
+    
+    diss_bkg_polygon <- sf::st_union(bkg_polygon)
+    sf_int_trans <- st_transform(sf_int, 54030) #robinson projection
+    buff_pnts <- sf::st_buffer(sf_int_trans, buffer*1000)  
+    buff_pnts <- st_transform(buff_pnts, 4326) #should maybe get the original crs and have that here instead
+    buff_pnts <- sf::st_union(buff_pnts)
+    diff_bkg_polygon <- sf::st_difference(diss_bkg_polygon, buff_pnts)  
+    points_out <- diff_bkg_polygon %>% 
+      sf::st_sample(., size = no_pnts, type = "random")
+    
+  }
+  
+  tibb <- as_tibble(points_out)
   
   sep_df <- tibb %>%
-    mutate(x = unlist(map(tibb$geometry, 1)),
-           y = unlist(map(tibb$geometry, 2))) %>%
+    mutate(x = unlist(purrr::map(tibb$geometry, 1)),
+           y = unlist(purrr::map(tibb$geometry, 2))) %>%
     dplyr::select(x, y)
   
   df_out <- data.frame(sp_name, sep_df)
   
   write.csv(x = df_out,
-            file = paste0(out_file),
+            file = paste0(out_dir, "/", sp_name, ".csv"),
             row.names = FALSE)
   
   print(basename(in_file))
   return(df_out)
 }
-
 
 
 
@@ -251,6 +294,7 @@ fitBC <-
            overwrite,
            threads = 4,
            eval = TRUE) {
+    
     print(sp_name)
     
     predictor_names <-
@@ -330,10 +374,12 @@ fitBC <-
       }
       
       if (eval) {
-        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-        save(thresholds,
-             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
-      }
+        evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+        #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
+        #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
+      
+        }
     }
 
   }
@@ -350,6 +396,8 @@ fitGLM <-
            overwrite,
            threads = 4,
            eval = TRUE) {
+    print(sp_name)
+    
     predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
     
     predictor_names <- paste0("CHELSA_bio10_", predictor_names)
@@ -420,7 +468,7 @@ fitGLM <-
       out_file <- paste0(sp_name, "_glm.tif")
       
       if (!dir.exists(pred_out_dir)) {
-        dir.create(pred_out_dir, recursive = TRUE)
+        dir.create(pred_out_dir)
       }
       
       raster::writeRaster(
@@ -432,15 +480,16 @@ fitGLM <-
       gc()
       cat("Done.\n")
       cat("...\n")
-      
       if (!dir.exists(eval_out_dir)) {
-        dir.create(eval_out_dir)
+        dir.create(eval_out_dir, recursive = TRUE)
       }
       
       if (eval) {
-        save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-        save(thresholds,
-             file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+        evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+        #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
+        #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
+        
       }
     }
     
@@ -460,6 +509,8 @@ fitRF <-   function(sp_name,
                     overwrite,
                     threads = 4,
                     eval = TRUE) {
+  print(sp_name)
+  
   predictor_names <- stringr::str_pad(predictor_names, 2, pad = "0")
   
   predictor_names <- paste0("CHELSA_bio10_", predictor_names)
@@ -523,7 +574,7 @@ fitRF <-   function(sp_name,
     out_file <- paste0(sp_name, "_rf.tif")
     
     if (!dir.exists(pred_out_dir)) {
-      dir.create(pred_out_dir, recursive = TRUE)
+      dir.create(pred_out_dir)
     }
     
     raster::writeRaster(
@@ -535,16 +586,16 @@ fitRF <-   function(sp_name,
     gc()
     cat("Done.\n")
     cat("...\n")
-    
     if (!dir.exists(eval_out_dir)) {
       dir.create(eval_out_dir, recursive = TRUE)
     }
     
     if (eval) {
-      save(aucs, file = paste0(eval_out_dir, "/", sp_name, "_aucs.RDA"))
-      save(thresholds,
-              file = paste0(eval_out_dir, "/", sp_name, "_thresholds.RDA"))
+      evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
+      #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
+      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
+      #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
+      
     }
-    
   }
 }

@@ -85,23 +85,11 @@ all_sp<-c(g_sp$species, s_sp)
 
 ``` 
 
-Get the taxonomy of the species gathered from SANBI - if needed 
-
-```{r, eval = FALSE}
-# 
-# tr_out<-lapply(s_sp[1:10], tax_out)
-# 
-# san_df<-do.call(rbind, tr_out)
-# 
-# all_sp<-rbind(g_sp, san_df)
-
-```
-
 ```{r Downloading data from GBIF and cleaning it before outputting}
 
 #gbifData(all_sp$species[1], ext = ext)
 
-spxy_out <- lapply(all_sp[1:10], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
+spxy_out <- lapply(all_sp[14], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
 
 sp_df <- data.frame(do.call(rbind, spxy_out))
 
@@ -112,7 +100,6 @@ sp_df$y <- as.numeric(as.character(sp_df$y))
 ```
 
 
-
 ##Coordinate Cleaner
 ```{r}
 
@@ -121,9 +108,6 @@ sp_cc <- clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
 sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
 
 ```
-
-
-
 
 
 ###Rarefy Points
@@ -172,16 +156,6 @@ pr_out_files <-
          "/",
          basename(pr_in_files))
 
-ras_extract <- function(in_file, out_file) {
-  df <- vroom::vroom(in_file)
-  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
-  ras_ext <- raster::extract(env_crop, xy)
-  pres_ext <- data.frame(df, ras_ext)
-  write.csv(x = pres_ext,
-            file = paste0(out_file),
-            row.names = FALSE)
-  
-}
 
 mapply(ras_extract, in_file = pr_in_files, out_file = pr_out_files)
 
@@ -191,6 +165,9 @@ mapply(ras_extract, in_file = pr_in_files, out_file = pr_out_files)
 ###Background Data
 ```{r}
 
+sp_names <- gsub("*.csv","",list.files(here::here("points/presence"),
+              pattern = "*.csv"))
+
 
 ecoreg <-
   sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp"))
@@ -198,26 +175,15 @@ ecoreg <-
 ecoreg <- ecoreg %>%
   dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
 
-bg_in_files <-
-  list.files(
-    here::here("points/presence/"),
-    pattern = "*.csv",
-    full.names = TRUE
-  )
+lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
-bg_out_files <- paste0(here::here("points/background/"),
-         "/",
-         basename(bg_in_files))
+lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/pseudoabsence/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
-
-mapply(background_sampler, in_file = bg_in_files ,no_pnts = 10000, out_file = bg_out_files)
 
 ```
 
 
 ```{r}
-
-
 bg_ex_in_files <- list.files(here::here("points/background/"),
                              pattern = "*.csv",
                              full.names = TRUE)
@@ -226,8 +192,17 @@ bg_ex_out_files <- paste0(here::here("environmental/background/"),
                           "/",
                           basename(bg_ex_in_files))
 
+ps_ex_in_files <- list.files(here::here("points/pseudoabsence/"),
+                             pattern = "*.csv",
+                             full.names = TRUE)
+
+ps_ex_out_files <-
+  paste0(here::here("environmental/pseudoabsence/"),
+         "/",
+         basename(bg_ex_in_files))
 
 mapply(ras_extract, in_file = bg_ex_in_files, out_file = bg_ex_out_files)
+mapply(ras_extract, in_file = ps_ex_in_files, out_file = ps_ex_out_files)
 
 ```
 
@@ -289,7 +264,7 @@ lapply(
   X = sp_names,
   fitRF,
   pres_dir = here::here("environmental/presence"),
-  backg_dir = here::here("environmental/background"),
+  backg_dir = here::here("environmental/pseudoabsence/"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/rf/"),
@@ -303,13 +278,78 @@ lapply(
 ```
 
 
-###Build Ensemble Model
+###Get Evaluations and AUCs
 ```{r}
 
+eval_files <-
+  list.files(
+    here::here("evaluation/"),
+    full.names = TRUE,
+    recursive = TRUE,
+    pattern = "*eval")
+  # )[grepl(sp_name,
+  #         list.files(
+  #           here::here("evaluation/"),
+  #           full.names = TRUE,
+  #           recursive = TRUE,
+  #           pattern = "*eval"
+  #         ))]
 
+eval_mean <- function(eval_file, threshold = "tss") {
+  load(eval_file)
+  model <- evals$model
+  species <- evals$sp_name
+  aucs <- mean(sapply(evals$aucs, function(x)
+    x@auc))
+  
+  if (model == "glm") {
+    thresholds  <-
+      mean(exp(evals$thresholds[[threshold]]) / (1 + exp(evals$thresholds[[threshold]])))
+  } else {
+    thresholds  <- mean(evals$thresholds[[threshold]])
+  }
+  
+  df_out <-
+    data.frame(
+      sp_name = species,
+      model = model,
+      auc = aucs,
+      threshold = thresholds
+    )
+  return(df_out)
+}
+
+evals_out <- lapply(eval_files, eval_mean, threshold = "tss")
 
 ```
 
+###Build Ensemble Model
+```{r}
+
+preds <- list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE)
+
+
+function(evals, preds){
+  
+  
+}
+preds <- stack(preds)
+
+  
+
+# pred <- raster::subset(preds, subset = layer_name)
+  # 
+  # pa <- pred >= thresholds
+  # 
+
+```
+
+
+###Land Use Masking?
+```{R}
+
+
+```
 
 ###Predict Forward
 ```{r}
