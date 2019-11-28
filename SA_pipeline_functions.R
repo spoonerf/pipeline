@@ -1,8 +1,5 @@
 
 
-
-
-
 gbifData <- function(species, ext_sp, ext_occ) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(species, " ")[[1]][1]
@@ -485,11 +482,9 @@ fitGLM <-
       }
       
       if (eval) {
-        evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
-        #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
-        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
-        #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
-        
+        evals <- list(sp_name = sp_name, model = "glm", aucs = aucs, thresholds = thresholds)
+        save(evals, file = paste0(eval_out_dir, "/", sp_name, "_glm_eval.RDA"))
+
       }
     }
     
@@ -591,11 +586,76 @@ fitRF <-   function(sp_name,
     }
     
     if (eval) {
-      evals <- list(sp_name = sp_name, model = "bioclim", aucs = aucs, thresholds = thresholds)
-      #evals <- data.frame(sp_name = sp_name, model = "bioclim", aucs = unlist(aucs), thresholds = unlist(thresholds))
-      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.RDA"))
-      #save(evals, file = paste0(eval_out_dir, "/", sp_name, "_bioclim_eval.csv"))      
-      
+      evals <- list(sp_name = sp_name, model = "rf", aucs = aucs, thresholds = thresholds)
+      save(evals, file = paste0(eval_out_dir, "/", sp_name, "_rf_eval.RDA"))
+
     }
   }
 }
+
+
+get_eval <- function(eval_file, threshold = "tss") {
+  load(eval_file)
+  model <- evals$model
+  species <- evals$sp_name
+  aucs <- mean(sapply(evals$aucs, function(x)
+    x@auc))
+  
+  if (model == "glm") {
+    thresholds  <-
+      mean(exp(evals$thresholds[[threshold]]) / (1 + exp(evals$thresholds[[threshold]])))
+  } else {
+    thresholds  <- mean(evals$thresholds[[threshold]])
+  }
+  
+  df_out <-
+    data.frame(
+      sp_name = species,
+      model = model,
+      auc = aucs,
+      threshold = thresholds
+    )
+  return(df_out)
+}
+
+
+
+ensemble_model <-
+  function(sp_name_in, eval_df, preds, method = "weighted") {
+    preds_f <- raster::stack(preds[grepl(sp_name_in, preds)])
+    order <- gsub(paste0(sp_name_in, "_"), "" , names(preds_f))
+    
+    evals_f <- eval_df %>%
+      dplyr::filter(sp_name == sp_name_in)
+    
+    aucs <- evals_f$auc
+    
+    if (all(order == evals_f$model)) {
+      if (method == "majority_pa") {
+        ens_preds <- preds_f > evals_f$threshold
+        ens_pa <- sum(ens_preds)
+        ens_pa[ens_pa < round(raster::nlayers(preds_f))] <- 0
+        ens_pa[ens_pa >= round(raster::nlayers(preds_f))] <- 1
+        ens_out <- ens_pa
+      }
+      
+      if (method == "weighted") {
+        preds_w <- preds_f * aucs
+        preds_sum <- sum(preds_w)
+        ens_out <- preds_sum / sum(aucs)
+        
+      }
+      
+      if (method == "mean") {
+        ens_out <- raster::calc(preds_f, mean, na.rm = TRUE)
+        
+      }
+      
+    }
+    gc()
+    raster::writeRaster(ens_out, here::here("predictions/ensemble",paste0(method, "/",sp_name_in, "_ensemble.tif")), overwrite = TRUE)
+    return(ens_out)
+  }
+
+
+

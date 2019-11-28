@@ -59,7 +59,7 @@ env_crop <- crop(env_layers, ext_occ)
 
 Removing species we aren't interested in e.g. fish. Leaving out birds for now as they all have large number of occurrences
 ```{r List of Species - gathered from SANBI}
-gbif_all <- read.csv("D:/Fiona/SHEFS/GBIF/Species_List/All_GBIF_Species_List.csv", stringsAsFactors = FALSE)
+gbif_all <- vroom::vroom("All_GBIF_Species_List.csv")
 
 g_sp <- gbif_all %>% 
   dplyr::filter(!is.na(species) & (class == "Mammalia" | class == "Gastropoda" | class == "Reptilia" |# class == "Aves" | 
@@ -75,7 +75,7 @@ g_sp <- gbif_all %>%
 ```{r}
 sanbi_all <- 
   do.call(rbind,
-          lapply(list.files(path = "D:/Fiona/SHEFS/SANBI/Species_List", pattern = "*.csv", full.names = TRUE), read.csv))
+          lapply(list.files(path = here::here("SANBI/Species_List"), pattern = "*.csv", full.names = TRUE), read.csv))
 
 s_sp <- na.omit(unique(as.character(sanbi_all$Binomial)))
 
@@ -89,7 +89,7 @@ all_sp<-c(g_sp$species, s_sp)
 
 #gbifData(all_sp$species[1], ext = ext)
 
-spxy_out <- lapply(all_sp[14], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
+spxy_out <- lapply(all_sp[101:200], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
 
 sp_df <- data.frame(do.call(rbind, spxy_out))
 
@@ -175,7 +175,7 @@ ecoreg <-
 ecoreg <- ecoreg %>%
   dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
 
-lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
+lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "background", buffer = 100, polygon = ecoreg)
 
 lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/pseudoabsence/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
@@ -192,6 +192,16 @@ bg_ex_out_files <- paste0(here::here("environmental/background/"),
                           "/",
                           basename(bg_ex_in_files))
 
+mapply(ras_extract, in_file = bg_ex_in_files, out_file = bg_ex_out_files)
+
+```
+
+```{r}
+
+if(!dir.exists(here::here("environmental/pseudoabsence/"))){
+  dir.create(here::here("environmental/pseudoabsence/"))
+}
+  
 ps_ex_in_files <- list.files(here::here("points/pseudoabsence/"),
                              pattern = "*.csv",
                              full.names = TRUE)
@@ -199,29 +209,27 @@ ps_ex_in_files <- list.files(here::here("points/pseudoabsence/"),
 ps_ex_out_files <-
   paste0(here::here("environmental/pseudoabsence/"),
          "/",
-         basename(bg_ex_in_files))
+         basename(ps_ex_in_files))
 
-mapply(ras_extract, in_file = bg_ex_in_files, out_file = bg_ex_out_files)
 mapply(ras_extract, in_file = ps_ex_in_files, out_file = ps_ex_out_files)
 
 ```
 
-
-###Fit Bioclim
+##subset species to ones we have all data for 
 ```{r}
-
-
 sp_names <- gsub("*.csv","",list.files(here::here("environmental/presence"),
               pattern = "*.csv"))
 
-sp_names <- sp_names[sp_names %in% gsub(".csv","",list.files(here::here("environmental/background")))]
+sp_names <- sp_names[sp_names %in% gsub(".csv","",list.files(here::here("environmental/pseudoabsence/")))]
+```
 
-
+###Fit Bioclim
+```{r}
 lapply(
-  X = sp_names,
+  X = sp_names[3],
   fitBC,
   pres_dir = here::here("environmental/presence"),
-  backg_dir = here::here("environmental/background"),
+  backg_dir = here::here("environmental/pseudoabsence/"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/bioclim/"),
@@ -240,10 +248,10 @@ lapply(
 ```{r}
 
 lapply(
-  X = sp_names,
+  X = sp_names[3],
   fitGLM,
   pres_dir = here::here("environmental/presence"),
-  backg_dir = here::here("environmental/background"),
+  backg_dir = here::here("environmental/pseudoabsence/"),
   predictor_names = c(1, 3, 4, 12),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/glm/"),
@@ -261,7 +269,7 @@ lapply(
 
 
 lapply(
-  X = sp_names,
+  X = sp_names[3],
   fitRF,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
@@ -287,72 +295,47 @@ eval_files <-
     full.names = TRUE,
     recursive = TRUE,
     pattern = "*eval")
-  # )[grepl(sp_name,
-  #         list.files(
-  #           here::here("evaluation/"),
-  #           full.names = TRUE,
-  #           recursive = TRUE,
-  #           pattern = "*eval"
-  #         ))]
 
-eval_mean <- function(eval_file, threshold = "tss") {
-  load(eval_file)
-  model <- evals$model
-  species <- evals$sp_name
-  aucs <- mean(sapply(evals$aucs, function(x)
-    x@auc))
-  
-  if (model == "glm") {
-    thresholds  <-
-      mean(exp(evals$thresholds[[threshold]]) / (1 + exp(evals$thresholds[[threshold]])))
-  } else {
-    thresholds  <- mean(evals$thresholds[[threshold]])
-  }
-  
-  df_out <-
-    data.frame(
-      sp_name = species,
-      model = model,
-      auc = aucs,
-      threshold = thresholds
-    )
-  return(df_out)
-}
 
-evals_out <- lapply(eval_files, eval_mean, threshold = "tss")
+evals_out <- lapply(eval_files, get_eval, threshold = "tss")
 
+eval_df <- do.call(rbind, evals_out)
+eval_df$sp_name <- as.character(eval_df$sp_name)
 ```
 
 ###Build Ensemble Model
 ```{r}
 
+if(!dir.exists(here::here("predictions/ensemble/majority_pa"))){
+  dir.create(here::here("predictions/ensemble/majority_pa"), recursive = TRUE)
+}
+
+if(!dir.exists(here::here("predictions/ensemble/weighted"))){
+  dir.create(here::here("predictions/ensemble/weighted"), recursive = TRUE)
+}
+
+if(!dir.exists(here::here("predictions/ensemble/mean"))){
+  dir.create(here::here("predictions/ensemble/mean"), recursive = TRUE)
+}
+
 preds <- list.files(here::here("predictions"), full.names = TRUE, recursive = TRUE)
 
+preds <- preds[!grepl("/ensemble/", preds)]
 
-function(evals, preds){
-  
+get_sp <- function(name){
+
+  if(sum(str_detect(preds, name)) >= 1){
+    return(name)
+  }
   
 }
-preds <- stack(preds)
 
-  
+sp_out <- lapply(sp_names, get_sp)
+eval_names <- do.call(rbind, sp_out)  
 
-# pred <- raster::subset(preds, subset = layer_name)
-  # 
-  # pa <- pred >= thresholds
-  # 
+lapply(X = eval_names, FUN = ensemble_model, eval_df = eval_df, preds = preds, method = "majority_pa")
 
-```
-
-
-###Land Use Masking?
-```{R}
-
-
-```
-
-###Predict Forward
-```{r}
+lapply(X = eval_names, FUN = ensemble_model, eval_df = eval_df, preds = preds, method = "weighted")
 
 
 ```
