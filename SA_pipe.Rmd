@@ -79,23 +79,20 @@ sanbi_all <-
 
 s_sp <- na.omit(unique(as.character(sanbi_all$Binomial)))
 
-s_sp<-s_sp[!s_sp %in% g_sp$species]
+s_sp <- s_sp[!s_sp %in% g_sp$species]
 
-all_sp<-c(g_sp$species, s_sp)
+sp_names <- c(g_sp$species, s_sp)
 
+sp_names <- gsub(" ", "_", sp_names)
 ``` 
 
 ```{r Downloading data from GBIF and cleaning it before outputting}
 
-#gbifData(all_sp$species[1], ext = ext)
+if(!dir.exists(here::here("points/raw"))){
+  dir.create(here::here("points/raw/"))
+}
 
-spxy_out <- lapply(all_sp[101:200], gbifData, ext_sp = ext_sp, ext_occ = ext_occ)
-
-sp_df <- data.frame(do.call(rbind, spxy_out))
-
-sp_df$species <- as.character(sp_df$species)
-sp_df$x <- as.numeric(as.character(sp_df$x))
-sp_df$y <- as.numeric(as.character(sp_df$y))
+spxy_out <- lapply(X = sp_names[1:100], FUN = gbifData, ext_sp = ext_sp, ext_occ = ext_occ, out_dir = here::here("points/raw"))
 
 ```
 
@@ -103,9 +100,19 @@ sp_df$y <- as.numeric(as.character(sp_df$y))
 ##Coordinate Cleaner
 ```{r}
 
-sp_cc <- clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+if(!dir.exists(here::here("points/cleaned_raw"))){
+  dir.create(here::here("points/cleaned_raw/"))
+}
 
-sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
+sp_names <- gsub(".csv", "", list.files(here::here("points/raw")))
+
+cc_wrapper <- function(sp_name, in_dir, out_dir)
+
+###would probably be better to clean multiple species at once because of how coordinate cleaner works  
+  
+lapply(X = sp_names, FUN = cc_wrapper, in_dir = here::here("points/raw"), out_dir = here::here("points/cleaned_raw/"))
+
+
 
 ```
 
@@ -119,7 +126,6 @@ rarefySpeciesPoints<-function(species){
   df_rar <- data.frame(species,rarefyPoints(env_crop[[1]], df_xy))
 
   print(species)
-  return(df_rar)
   
   }
 
