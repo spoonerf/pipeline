@@ -58,37 +58,6 @@ cc_wrapper <- function(sp_name, in_dir, out_dir){
   }
 }
 
-tax_out <- function(id) {
-  out <- taxize::classification(id, db = "ncbi")
-  sp_out <- NULL
-  
-  if (!is.na(out[[1]])) {
-    profvis::pause(3)
-    sp_out <-
-      out[[1]][out[[1]]$rank %in% c("kingdom",
-                                    "phylum",
-                                    "class",
-                                    "order",
-                                    "family",
-                                    "genus",
-                                    "species"),]
-    
-    sp_out$kingdom <- sp_out$name[sp_out$rank == "kingdom"]
-    sp_out$phylum <- sp_out$name[sp_out$rank == "phylum"]
-    sp_out$class <- sp_out$name[sp_out$rank == "class"]
-    sp_out$order <- sp_out$name[sp_out$rank == "order"]
-    sp_out$family <- sp_out$name[sp_out$rank == "family"]
-    sp_out$genus <- sp_out$name[sp_out$rank == "genus"]
-    sp_out$species <- sp_out$name[sp_out$rank == "species"]
-    
-    
-    sp_out <- sp_out %>%
-      dplyr::select(kingdom, phylum, class, order, family, genus, species) %>%
-      distinct()
-    
-  }
-  return(sp_out)
-}
 
 
 ras_extract <- function(sp_name, in_dir, out_dir) {
@@ -129,11 +98,11 @@ loadBioclim <-
     return(bioclim)
   }
 
-
-
-
-
-rarefyPoints <- function(ref_map, pnts) {
+rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map){
+  
+  df <- read.csv(paste0(in_dir, "/", sp_name, ".csv"))
+  pnts <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  
   cells <- raster::cellFromXY(ref_map, pnts)
   pres_cells <- ref_map
   pres_cells[unique(cells)] <- 1
@@ -145,9 +114,15 @@ rarefyPoints <- function(ref_map, pnts) {
   )[, c(1, 2)]
   rarefied_presence <- sp::SpatialPoints(rarefied_presence)
   sp::proj4string(rarefied_presence) <- sp::proj4string(ref_map)
-  return(rarefied_presence)
+  df_rar <- data.frame(sp_name,rarefied_presence)
+  
+  print(paste0(sp_name, " rarefied!"))
+  
+  if (nrow(df_rar)>10){
+    write.csv(df_rar, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
+  }
+  
 }
-
 
 ####
 ###@dens_abs - whether you want to use sampling based on density or an absolute number e.g. 10000
@@ -671,4 +646,35 @@ ensemble_model <-
   }
 
 
+tax_out <- function(id) {
+  out <- taxize::classification(id, db = "ncbi")
+  sp_out <- NULL
+  
+  if (!is.na(out[[1]])) {
+    profvis::pause(3)
+    sp_out <-
+      out[[1]][out[[1]]$rank %in% c("kingdom",
+                                    "phylum",
+                                    "class",
+                                    "order",
+                                    "family",
+                                    "genus",
+                                    "species"),]
+    
+    sp_out$kingdom <- sp_out$name[sp_out$rank == "kingdom"]
+    sp_out$phylum <- sp_out$name[sp_out$rank == "phylum"]
+    sp_out$class <- sp_out$name[sp_out$rank == "class"]
+    sp_out$order <- sp_out$name[sp_out$rank == "order"]
+    sp_out$family <- sp_out$name[sp_out$rank == "family"]
+    sp_out$genus <- sp_out$name[sp_out$rank == "genus"]
+    sp_out$species <- sp_out$name[sp_out$rank == "species"]
+    
+    
+    sp_out <- sp_out %>%
+      dplyr::select(kingdom, phylum, class, order, family, genus, species) %>%
+      distinct()
+    
+  }
+  return(sp_out)
+}
 
