@@ -119,56 +119,33 @@ lapply(X = sp_names, FUN = cc_wrapper, in_dir = here::here("points/raw"), out_di
 
 ###Rarefy Points
 ```{r}
-rarefySpeciesPoints<-function(species){
-  
-  df <- sp_df[sp_df$species == species,]
-  df_xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
-  df_rar <- data.frame(species,rarefyPoints(env_crop[[1]], df_xy))
+if(!dir.exists(here::here("points/rarefied"))){
+  dir.create(here::here("points/rarefied/"))
+}
 
-  print(species)
-  
-  }
+ref_map <- env_crop[[1]]
+ref_map[!is.na(ref_map)] <- 0   #ref_map should be full of non-1 values
 
 
-rarefy_out <- lapply(unique(sp_df$species), rarefySpeciesPoints)
-#r_sp_df <- do.call(rbind, rarefy_out)
+lapply(X = sp_names, FUN = rarefyPoints,in_dir = here::here("points/cleaned_raw/"), out_dir = here::here("points/rarefied/"), ref_map = ref_map)
 
-#rarefy_out[sapply(rarefy_out, is.null)] <- NULL
-
-output_csv <- function(data, names){ 
-    folder_path <- here::here("points/presence/")
-    write_csv(data, paste0(folder_path,"/", names, ".csv"))
-  }
-
-list(data = rarefy_out,
-     names = gsub(" ","_",unique(sp_df$species))) %>% 
-     purrr::pmap(output_csv) 
-
-
-###should try and filter out sp with less than 10 occurrences at this point
 
 ```
 
 
-###Extract Data
+###Extract Data for presence points
 ```{r}
-pr_in_files <-
-  list.files(here::here("points/presence/"),
-             full.names = TRUE,
-             pattern = "*.csv")
 
-pr_out_files <-
-  paste0(here::here("environmental/presence"),
-         "/",
-         basename(pr_in_files))
+if(!dir.exists(here::here("environmental/presence/"))){
+  dir.create(here::here("environmental/presence/"))
+}
 
-
-mapply(ras_extract, in_file = pr_in_files, out_file = pr_out_files)
+lapply(X= sp_names[1:10], FUN = ras_extract,in_dir = here::here("points/presence/"), out_dir = here::here("environmental/presence/"))
 
 ```
 
 
-###Background Data
+###Background Data - create background and pseudoabsence points - need to think about buffer and density values
 ```{r}
 
 sp_names <- gsub("*.csv","",list.files(here::here("points/presence"),
@@ -179,13 +156,13 @@ ecoreg <-
   sf::st_crop(.,ext_occ) %>%  ##cropping to the area of intereste=
   dplyr::select(OBJECTID, ECO_NAME) ##just selecting out the columns we're interested in
 
-lapply(X = sp_names[1:10], background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "background", buffer = 100, polygon = ecoreg)
+lapply(X = sp_names[1:10], background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "background",  polygon = ecoreg)
 
 lapply(X = sp_names[1:10], background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/pseudoabsence/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
 ```
 
-
+###Extract environmental data for background points 
 ```{r}
 
 if(!dir.exists(here::here("environmental/background/"))){
@@ -196,6 +173,7 @@ lapply(X= sp_names[1:10], FUN = ras_extract,in_dir = here::here("points/backgrou
 
 ```
 
+###Extract environmental data for pseudoabsence points
 ```{r}
 
 if(!dir.exists(here::here("environmental/pseudoabsence/"))){
