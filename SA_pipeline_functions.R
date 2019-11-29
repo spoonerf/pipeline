@@ -78,16 +78,16 @@ tax_out <- function(id) {
 }
 
 
-ras_extract <- function(in_file, out_file) {
-  df <- vroom::vroom(in_file)
+ras_extract <- function(sp_name, in_dir, out_dir) {
+  df <- vroom::vroom(paste0(in_dir, "/", sp_name, ".csv"))
   xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
   ras_ext <- raster::extract(env_crop, xy)
   pres_ext <- data.frame(df, ras_ext)
   pres_ext <- pres_ext[complete.cases(pres_ext),]
   write.csv(x = pres_ext,
-            file = paste0(out_file),
+            file = paste0(out_dir, "/", sp_name, ".csv"),
             row.names = FALSE)
-  
+  print(sp_name)
 }
 
 
@@ -197,8 +197,8 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
             file = paste0(out_dir, "/", sp_name, ".csv"),
             row.names = FALSE)
   
-  print(basename(in_file))
-  return(df_out)
+  print(basename(sp_name))
+  #return(df_out)
 }
 
 
