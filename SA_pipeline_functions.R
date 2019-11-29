@@ -1,9 +1,9 @@
 
 
-gbifData <- function(species, ext_sp, ext_occ) {
+gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
   # Include something for if there is nothing in GBIF...
-  gen <- strsplit(species, " ")[[1]][1]
-  sp <- strsplit(species, " ")[[1]][2]
+  gen <- strsplit(sp_name, "_")[[1]][1]
+  sp <- strsplit(sp_name, "_")[[1]][2]
   
   # count records.
   .count <- dismo::gbif(
@@ -31,19 +31,32 @@ gbifData <- function(species, ext_sp, ext_occ) {
         xx <- cbind(.xx$lon, .xx$lat)
         output_data <-
           matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
-        output_data <- cbind(species, output_data)
+        output_data <- cbind(sp_name, output_data)
         colnames(output_data) <- c("species", "x", "y")
-      } else {
+        if(nrow(output_data) >= 10){
+          write.csv(output_data, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
+        }
+        } else {
         output_data <- NULL
       }
     }
   } else {
-    output_data <- paste0(species, " too many records")
+    output_data <- paste0(sp_name, " too many records")
   }
-  print(paste(species, "done!"))
-  return(output_data)
+  print(paste(sp_name, "done!"))
+  #return(output_data)
 }
 
+cc_wrapper <- function(sp_name, in_dir, out_dir){
+  sp_df <- read.csv(paste0(in_dir,"/", sp_name, ".csv"))
+  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+  sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
+  
+  print(paste(sp_name, "cleaned!"))
+  if (nrow(sp_df)> 10){
+  write.csv(sp_df, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
+  }
+}
 
 tax_out <- function(id) {
   out <- taxize::classification(id, db = "ncbi")
