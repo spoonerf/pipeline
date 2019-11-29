@@ -168,31 +168,25 @@ mapply(ras_extract, in_file = pr_in_files, out_file = pr_out_files)
 sp_names <- gsub("*.csv","",list.files(here::here("points/presence"),
               pattern = "*.csv"))
 
-
 ecoreg <-
-  sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp"))
+  sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp")) %>% 
+  sf::st_crop(.,ext_occ) %>%  ##cropping to the area of intereste=
+  dplyr::select(OBJECTID, ECO_NAME) ##just selecting out the columns we're interested in
 
-ecoreg <- ecoreg %>%
-  dplyr::select(OBJECTID, ECO_NAME)   ##just selecting out the columns we're interested in
+lapply(X = sp_names[1:10], background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "background", buffer = 100, polygon = ecoreg)
 
-lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/background/"), dens_abs = "density", density = 100, type = "background", buffer = 100, polygon = ecoreg)
-
-lapply(X = sp_names, background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/pseudoabsence/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
-
+lapply(X = sp_names[1:10], background_sampler, in_dir = here::here("points/presence/"), out_dir = here::here("points/pseudoabsence/"), dens_abs = "density", density = 100, type = "pseudoabsence", buffer = 100, polygon = ecoreg)
 
 ```
 
 
 ```{r}
-bg_ex_in_files <- list.files(here::here("points/background/"),
-                             pattern = "*.csv",
-                             full.names = TRUE)
 
-bg_ex_out_files <- paste0(here::here("environmental/background/"),
-                          "/",
-                          basename(bg_ex_in_files))
+if(!dir.exists(here::here("environmental/background/"))){
+  dir.create(here::here("environmental/background/"))
+}
 
-mapply(ras_extract, in_file = bg_ex_in_files, out_file = bg_ex_out_files)
+lapply(X= sp_names[1:10], FUN = ras_extract,in_dir = here::here("points/background/"), out_dir = here::here("environmental/background/"))
 
 ```
 
@@ -202,16 +196,8 @@ if(!dir.exists(here::here("environmental/pseudoabsence/"))){
   dir.create(here::here("environmental/pseudoabsence/"))
 }
   
-ps_ex_in_files <- list.files(here::here("points/pseudoabsence/"),
-                             pattern = "*.csv",
-                             full.names = TRUE)
 
-ps_ex_out_files <-
-  paste0(here::here("environmental/pseudoabsence/"),
-         "/",
-         basename(ps_ex_in_files))
-
-mapply(ras_extract, in_file = ps_ex_in_files, out_file = ps_ex_out_files)
+lapply(X= sp_names[1:10], FUN = ras_extract,in_dir = here::here("points/pseudoabsence/"), out_dir = here::here("environmental/pseudoabsence/"))
 
 ```
 
