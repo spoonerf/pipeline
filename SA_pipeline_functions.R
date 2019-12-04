@@ -28,6 +28,8 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
       output_data <- NULL
     } else {
       if (all(c("lon", "lat") %in% colnames(.xx))) {
+        .xx <- .xx %>% 
+          dplyr::filter((basisOfRecord == "HUMAN_OBSERVATION" | basisOfRecord == "LIVING_SPECIMEN" | basisOfRecord == "MACHINE_OBSERVATION") & year >= 2010 )
         xx <- cbind(.xx$lon, .xx$lat)
         output_data <-
           matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
@@ -49,7 +51,13 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
 
 cc_wrapper <- function(sp_name, in_dir, out_dir){
   sp_df <- read.csv(paste0(in_dir,"/", sp_name, ".csv"))
-  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species",tests = c("capitals",
+                                                                                                           "centroids", 
+                                                                                                           "equal", 
+                                                                                                           "gbif", 
+                                                                                                           "institutions", 
+                                                                                                           "seas",
+                                                                                                           "zeros"))
   sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
   
   print(paste(sp_name, "cleaned!"))
@@ -60,10 +68,10 @@ cc_wrapper <- function(sp_name, in_dir, out_dir){
 
 
 
-ras_extract <- function(sp_name, in_dir, out_dir) {
+ras_extract <- function(sp_name, in_dir, out_dir, raster_in) {
   df <- vroom::vroom(paste0(in_dir, "/", sp_name, ".csv"))
   xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
-  ras_ext <- raster::extract(env_crop, xy)
+  ras_ext <- raster::extract(raster_in, xy)
   pres_ext <- data.frame(df, ras_ext)
   pres_ext <- pres_ext[complete.cases(pres_ext),]
   write.csv(x = pres_ext,
@@ -181,7 +189,7 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
   
   df_out <- data.frame(sp_name, sep_df)
   
-  write.csv(x = df_out,
+  write.csv(df_out,
             file = paste0(out_dir, "/", sp_name, ".csv"),
             row.names = FALSE)
   
