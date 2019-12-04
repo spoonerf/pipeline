@@ -54,7 +54,7 @@ ext_occ<-extent(xmin, xmax, ymin, ymax)
 ```{r, Loading and cropping the environmental data, cache=TRUE}
 
 env_layers <- loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
-env_crop <- crop(env_layers, ext_occ)
+env_crop <- raster::crop(env_layers, ext_occ)
 
 ```
 
@@ -88,7 +88,7 @@ sp_names <- c(g_sp$species, s_sp)
 sp_names <- gsub(" ", "_", sp_names)
 ``` 
 
-```{r Downloading data from GBIF}
+```{r Downloading data from GBIF - only includes human observations, living specimens or machine observations from 2010 onwards}
 
 if(!dir.exists(here::here("points/raw"))){
   dir.create(here::here("points/raw/"), recursive = TRUE)
@@ -145,7 +145,7 @@ if(!dir.exists(here::here("environmental/presence/"))){
 sp_names <- gsub(".csv", "", list.files(here::here("points/rarefied/")))
 
 
-lapply(X= sp_names, FUN = ras_extract,in_dir = here::here("points/rarefied/"), out_dir = here::here("environmental/presence/"))
+lapply(X= sp_names, FUN = ras_extract,in_dir = here::here("points/rarefied/"), out_dir = here::here("environmental/presence/"), raster_in = env_crop)
 
 ```
 
@@ -188,7 +188,7 @@ lapply(X = sp_names, background_sampler, in_dir = here::here("points/rarefied/")
 #   dir.create(here::here("environmental/background/"))
 # }
 # 
-# lapply(X= sp_names, FUN = ras_extract,in_dir = here::here("points/background/"), out_dir = here::here("environmental/background/"))
+# lapply(X= sp_names, FUN = ras_extract,in_dir = here::here("points/background/"), out_dir = here::here("environmental/background/"), raster_in = env_crop)
 
 ```
 
@@ -200,7 +200,7 @@ if(!dir.exists(here::here("environmental/pseudoabsence/"))){
 }
   
 
-lapply(X= sp_names, FUN = ras_extract,in_dir = here::here("points/pseudoabsence/"), out_dir = here::here("environmental/pseudoabsence/"))
+lapply(X= sp_names, FUN = ras_extract,in_dir = here::here("points/pseudoabsence/"), out_dir = here::here("environmental/pseudoabsence/"), raster_in = env_crop)
 
 ```
 
@@ -227,14 +227,15 @@ if(!dir.exists(here::here("predictions/rf/"))){
 
 
 ```
+
 ###Fit Bioclim
 ```{r}
 lapply(
-  X = sp_names[1:10],
+  X = sp_names,
   fitBC,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
-  predictor_names = c(1, 3, 4, 12),
+  predictor_names = c(1, 5, 6, 12, 13, 14),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/bioclim/"),
   eval_out_dir = here::here("evaluation/bioclim/"),
@@ -252,11 +253,11 @@ lapply(
 ```{r}
 
 lapply(
-  X = sp_names[1:10],
+  X = sp_names[11:length(sp_names)],
   fitGLM,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
-  predictor_names = c(1, 3, 4, 12),   #need to think about which ones we want to include
+  predictor_names = c(1, 5, 6, 12, 13, 14),   #need to think about which ones we want to include
   predictors = env_crop,
   pred_out_dir = here::here("predictions/glm/"),
   eval_out_dir = here::here("evaluation/glm/"),
@@ -273,11 +274,11 @@ lapply(
 
 
 lapply(
-  X = sp_names[1:10],
+  X = sp_names[14:length(sp_names)],
   fitRF,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
-  predictor_names = c(1, 3, 4, 12),
+  predictor_names = c(1, 5, 6, 12, 13, 14),
   predictors = env_crop,
   pred_out_dir = here::here("predictions/rf/"),
   eval_out_dir = here::here("evaluation/rf/"),
@@ -328,7 +329,7 @@ preds <- preds[!grepl("/ensemble/", preds)]
 
 get_sp <- function(name){
 
-  if(sum(str_detect(preds, name)) >= 1){
+  if(sum(stringr::str_detect(preds, name)) >= 1){
     return(name)
   }
   
