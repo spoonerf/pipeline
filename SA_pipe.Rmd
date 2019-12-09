@@ -45,14 +45,14 @@ xmin <- 4
 xmax <- 59 # could be 52 if we don't want to include Mauritius 
 ymin <- -35
 ymax <- 0
+
+min_occ <- 40 # minimum number of occurrence points to be included in the models
+
+bioclim_layers <- c(1, 5, 6, 13, 14)#the number of the bioclim layers to be included as environmental variables - https://worldclim.org/bioclim
  
 ext_occ<-extent(xmin, xmax, ymin, ymax)
 
-```
-
-###Environmental Data Prep
-```{r, Loading and cropping the environmental data, cache=TRUE}
-
+###Loading and cropping the environmental data
 env_layers <- loadBioclim(path = here::here("CHELSA/"), extension = ".tif")
 env_crop <- raster::crop(env_layers, ext_occ)
 
@@ -86,6 +86,9 @@ s_sp <- s_sp[!s_sp %in% g_sp$species]
 sp_names <- c(g_sp$species, s_sp)
 
 sp_names <- gsub(" ", "_", sp_names)
+
+write.csv(sp_names, "species_names_for_pipeline.csv", row.names = FALSE)
+
 ``` 
 
 ```{r Downloading data from GBIF - only includes human observations, living specimens or machine observations from 2010 onwards}
@@ -94,7 +97,7 @@ if(!dir.exists(here::here("points/raw"))){
   dir.create(here::here("points/raw/"), recursive = TRUE)
 }
 
-spxy_out <- lapply(X = sp_names[1:100], FUN = gbifData, ext_sp = ext_sp, ext_occ = ext_occ, out_dir = here::here("points/raw"))
+spxy_out <- lapply(X = sp_names[1:100], FUN = gbifData, ext_sp = ext_sp, ext_occ = ext_occ, out_dir = here::here("points/raw"), min_occ = min_occ)
 
 ```
 
@@ -110,7 +113,7 @@ sp_names <- gsub(".csv", "", list.files(here::here("points/raw")))
 
 ###would probably be better to clean multiple species at once because of how coordinate cleaner works  
   
-lapply(X = sp_names, FUN = cc_wrapper, in_dir = here::here("points/raw"), out_dir = here::here("points/cleaned_raw/"))
+lapply(X = sp_names, FUN = cc_wrapper, in_dir = here::here("points/raw"), out_dir = here::here("points/cleaned_raw/"), min_occ = min_occ)
 
 
 
@@ -129,7 +132,7 @@ ref_map[!is.na(ref_map)] <- 0   #ref_map should be full of non-1 values
 sp_names <- gsub(".csv", "", list.files(here::here("points/cleaned_raw")))
 
 
-lapply(X = sp_names, FUN = rarefyPoints,in_dir = here::here("points/cleaned_raw/"), out_dir = here::here("points/rarefied/"), ref_map = ref_map)
+lapply(X = sp_names, FUN = rarefyPoints,in_dir = here::here("points/cleaned_raw/"), out_dir = here::here("points/rarefied/"), ref_map = ref_map, min_occ = min_occ)
 
 
 ```
@@ -235,7 +238,7 @@ lapply(
   fitBC,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
-  predictor_names = c(1, 5, 6, 12, 13, 14),
+  predictor_names = bioclim_layers,
   predictors = env_crop,
   pred_out_dir = here::here("predictions/bioclim/"),
   eval_out_dir = here::here("evaluation/bioclim/"),
@@ -253,11 +256,11 @@ lapply(
 ```{r}
 
 lapply(
-  X = sp_names[11:length(sp_names)],
+  X = sp_names,
   fitGLM,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
-  predictor_names = c(1, 5, 6, 12, 13, 14),   #need to think about which ones we want to include
+  predictor_names = bioclim_layers,   #need to think about which ones we want to include
   predictors = env_crop,
   pred_out_dir = here::here("predictions/glm/"),
   eval_out_dir = here::here("evaluation/glm/"),
@@ -274,11 +277,11 @@ lapply(
 
 
 lapply(
-  X = sp_names[14:length(sp_names)],
+  X = sp_names,
   fitRF,
   pres_dir = here::here("environmental/presence"),
   backg_dir = here::here("environmental/pseudoabsence/"),
-  predictor_names = c(1, 5, 6, 12, 13, 14),
+  predictor_names = bioclim_layers,
   predictors = env_crop,
   pred_out_dir = here::here("predictions/rf/"),
   eval_out_dir = here::here("evaluation/rf/"),
