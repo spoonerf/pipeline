@@ -1,6 +1,25 @@
+gbifCountData <- function(sp_name, ext_sp) {
+  # Include something for if there is nothing in GBIF...
+  gen <- strsplit(sp_name, "_")[[1]][1]
+  sp <- strsplit(sp_name, "_")[[1]][2]
+  
+  # count records.
+  .count <- dismo::gbif(
+    genus = gen,
+    species = sp,
+    ext = ext_sp,
+    geo = TRUE,
+    removeZeros = TRUE,
+    download = FALSE
+  )
+  
+  output_data <-  data.frame(sp_name, .count)
+  print(paste(sp_name, "done!"))
+  return(output_data)
+}
 
 
-gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
+gbifData <- function(sp_name, ext_sp, ext_occ, out_dir, min_occ = 10) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(sp_name, "_")[[1]][1]
   sp <- strsplit(sp_name, "_")[[1]][2]
@@ -35,7 +54,7 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
           matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
         output_data <- cbind(sp_name, output_data)
         colnames(output_data) <- c("species", "x", "y")
-        if(nrow(output_data) >= 10){
+        if(nrow(output_data) >= min_occ){
           write.csv(output_data, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
         }
         } else {
@@ -49,7 +68,8 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
   #return(output_data)
 }
 
-cc_wrapper <- function(sp_name, in_dir, out_dir){
+
+cc_wrapper <- function(sp_name, in_dir, out_dir, min_occ = 10){
   sp_df <- read.csv(paste0(in_dir,"/", sp_name, ".csv"))
   sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species",tests = c("capitals",
                                                                                                            "centroids", 
@@ -61,7 +81,7 @@ cc_wrapper <- function(sp_name, in_dir, out_dir){
   sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
   
   print(paste(sp_name, "cleaned!"))
-  if (nrow(sp_df)> 10){
+  if (nrow(sp_df)>= min_occ){
   write.csv(sp_df, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
   }
 }
@@ -106,7 +126,7 @@ loadBioclim <-
     return(bioclim)
   }
 
-rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map){
+rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map, min_occ = 10 ){
   
   df <- read.csv(paste0(in_dir, "/", sp_name, ".csv"))
   pnts <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
@@ -126,7 +146,7 @@ rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map){
   
   print(paste0(sp_name, " rarefied!"))
   
-  if (nrow(df_rar)>10){
+  if (nrow(df_rar) >= min_occ){
     write.csv(df_rar, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
   }
   
