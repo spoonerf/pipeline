@@ -89,8 +89,8 @@ cc_wrapper <- function(sp_name, in_dir, out_dir, min_occ = 10){
 
 
 ras_extract <- function(sp_name, in_dir, out_dir, raster_in) {
-  df <- vroom::vroom(paste0(in_dir, "/", sp_name, ".csv"))
-  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  df <- vroom::vroom(paste0(in_dir, "/", sp_name, ".csv"), delim = ",")
+  xy <- sp::SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
   ras_ext <- raster::extract(raster_in, xy)
   pres_ext <- data.frame(df, ras_ext)
   pres_ext <- pres_ext[complete.cases(pres_ext),]
