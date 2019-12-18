@@ -47,15 +47,30 @@ files <- gsub("\\..*","",files)
 
 for(file in files){
   
-  ptc <- readLines("job_001.sh")  #Read in the template file
+  ptc <- readLines(here::here("bash_scripts","job_001.sh"))  #Read in the template file
   ptc[5] <- gsub("job_001", file, ptc[5])
   ptc[23] <- gsub("job_001", file, ptc[23])
   ptc[24] <- gsub("job_001", file, ptc[24])
   ptc[25] <- gsub("job_001", file, ptc[25])
-  ptc[26] <- "\n"
-  writeLines(ptc, here::here("bash_scripts",paste0(file, ".sh")))  #Use this as the file name and write it to the output directory
+  writeLines(ptc, here::here("bash_scripts",paste0(file, ".sh")), sep = "\n")  #Use this as the file name and write it to the output directory
   
 }
 
 
+#changing the EOL formatting to unix rather than dos
+
+unix_convert <- "tr -d '\015' <job_001.sh > ujob_001.sh"
+
+convert_out <- NULL
+
+for (file in files){
+  
+  ptc <- "tr -d '\015' <job_001.sh > ujob_001.sh"
+  ptc <- gsub("job_001", file, ptc)
+  
+  convert_out <- rbind(convert_out, ptc)
+
+    }
+
+write.table(convert_out, file = "convert_unix.txt", row.names = FALSE)
 
