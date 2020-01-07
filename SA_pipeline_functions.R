@@ -33,7 +33,7 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir, min_occ = 10) {
     removeZeros = TRUE,
     download = FALSE
   )
-  if (.count <= 200000) {
+  if (.count >= 10 & .count <= 200000) {
     .xx <- dismo::gbif(
       genus = gen,
       species = sp,
