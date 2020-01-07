@@ -1,3 +1,6 @@
+######################################################################################################
+### creating an R script for each job - essentially changing the lines which refer to the job name ###
+######################################################################################################
 
 files <- list.files(here::here("species_lists/"))
 
@@ -8,7 +11,7 @@ if(!dir.exists(here::here("r_jobs"))){
            
 for(file in files){
   
-  ptc<-readLines(here::here("r_jobs", "job_001.R"))  #Read in the template file
+  ptc <- readLines(here::here("r_jobs", "job_001.R"))  #Read in the template file
   job <- gsub(".csv", "", file)
   ptc[17] <- gsub("job_001", job, ptc[17])
   ptc[46] <- gsub("job_001.csv", file, ptc[46])
@@ -17,8 +20,9 @@ for(file in files){
   
 }
 
-
-###R file to delete files created during job - after it has been tarred up.
+################################################################################
+### R file to delete files created during job - after it has been tarred up. ###
+################################################################################
 
 if(!dir.exists(here::here("delete_jobs"))){
   dir.create(here::here("delete_jobs"))
@@ -27,7 +31,7 @@ if(!dir.exists(here::here("delete_jobs"))){
 
 for(file in files){
   
-  ptc<-readLines(here::here("delete_jobs", "job_001.R"))  #Read in the template file
+  ptc <- readLines(here::here("delete_jobs", "job_001.R"))  #Read in the template file
   job <- gsub(".csv", "", file)
   ptc[1] <- gsub("job_001", job, ptc[1])
   ptc[3] <- gsub("job_001.csv", file, ptc[3])
@@ -36,8 +40,9 @@ for(file in files){
   
 }
 
-
-####bash_scripts to submit all the jobs
+########################################### 
+### bash_scripts to submit all the jobs ###
+###########################################
 
 if(!dir.exists(here::here("bash_scripts"))){
   dir.create(here::here("bash_scripts"))
@@ -56,8 +61,10 @@ for(file in files){
   
 }
 
-
-#changing the EOL formatting to unix rather than dos
+####################################################
+### Changing the EOL formatting from dos to unix ###
+### Code to be run in cmd on windows             ###
+####################################################
 
 unix_convert <- "tr -d '\015' <job_001.sh > ujob_001.sh"
 
