@@ -1,5 +1,6 @@
 #source(here::here("combine/FS","pat.R"))
 #devtools::install_github("https://github.com/hferg/sdmpl", auth_token = GITHUB_PAT)
+#library(sdmpl)
 
 library(CoordinateCleaner)
 library(dplyr)
@@ -7,13 +8,11 @@ library(here)
 library(lwgeom)
 library(raster)
 library(readr)
-#library(sdmpl)
 library(sf)
 
 source("SA_pipeline_functions.R")
 
 # Data Preparation
-
 
 sp_name <-
   "Lophorina_superba"  #add species name with underscore between genus and species
@@ -36,21 +35,19 @@ bioclim_layers <-
 
 ###Loading and cropping the environmental data
 env_layers <-
-  loadBioclim(path = ("CHELSA/"), extension = ".tif")  #add the path linking to your environment variables.
+  loadBioclim(path = ("CHELSA/"), extension = ".tif")  #add the path linking to your environment variables. CHELSA bioclim variables from here: http://chelsa-climate.org/downloads/ 
 env_crop <- raster::crop(env_layers, ext_occ)
 
 
-#if this directory does not already exist it creates it
+#This code creates this directory  if itdoes not already exist
 if (!dir.exists(here::here("points/raw"))) {
   dir.create(here::here("points/raw/"), recursive = TRUE)
 }
 
 spxy_out <- gbifData(
   sp_name = sp_name,
-  ext_occ = ext_occ,
-  #area over which occurrence points will be downloaded
-  out_dir = here::here("points/raw"),
-  #where points will be saved
+  ext_occ = ext_occ,#area over which occurrence points will be downloaded
+  out_dir = here::here("points/raw"),#where points will be saved
   min_occ = min_occ
 )
 
@@ -67,14 +64,13 @@ cc_wrapper(
   out_dir = here::here("points/cleaned_raw")
 )
 
-###Rarefy Points
+###Rarefy Points - so there is only one occurrence point per grid cell
 if (!dir.exists(here::here("points/rarefied"))) {
   dir.create(here::here("points/rarefied/"))
 }
 
 ref_map <- env_crop[[1]]
-ref_map[!is.na(ref_map)] <-
-  0   #ref_map should be full of non-1 values
+ref_map[!is.na(ref_map)] <- 0   #ref_map should be full of non-1 values
 
 rarefyPoints(
   sp_name = sp_name,
@@ -194,7 +190,6 @@ fitGLM(
   pres_dir = here::here("environmental/presence/"),
   backg_dir = here::here("environmental/pseudoabsence/"),
   predictor_names = bioclim_layers,
-  #need to think about which ones we want to include
   predictors = env_crop,
   pred_out_dir = here::here("predictions/glm/"),
   eval_out_dir = here::here("evaluation/glm/"),
@@ -255,17 +250,6 @@ preds <-
 
 preds <- preds[!grepl("/ensemble/", preds)]
 
-# get_sp <- function(name){
-#
-#   if(sum(stringr::str_detect(preds, name)) >= 1){
-#     return(name)
-#   }
-#
-# }
-#
-# sp_out <- lapply(sp_name, get_sp)
-# eval_names <- do.call(rbind, sp_out)
-
 maj_pa <- ensemble_model(
   sp_name = sp_name,
   eval_df = eval_df,
@@ -282,8 +266,7 @@ weighted <- ensemble_model(
   out_dir = here::here("predictions/ensemble")
 )
 
-xy <-
-  read.csv(paste0(here::here("points/rarefied/"), "/", sp_name, ".csv"))
+xy <-  read.csv(paste0(here::here("points/rarefied/"), "/", sp_name, ".csv"))
 
 plot(maj_pa)
 points(xy$x, xy$y)
