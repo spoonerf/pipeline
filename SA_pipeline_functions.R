@@ -1,6 +1,4 @@
-
-
-gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
+gbifCountData <- function(sp_name, ext_sp) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(sp_name, "_")[[1]][1]
   sp <- strsplit(sp_name, "_")[[1]][2]
@@ -14,7 +12,28 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
     removeZeros = TRUE,
     download = FALSE
   )
-  if (.count <= 200000) {
+  
+  output_data <-  data.frame(sp_name, .count)
+  print(paste(sp_name, "done!"))
+  return(output_data)
+}
+
+
+gbifData <- function(sp_name, ext_sp, ext_occ, out_dir, min_occ = 10) {
+  # Include something for if there is nothing in GBIF...
+  gen <- strsplit(sp_name, "_")[[1]][1]
+  sp <- strsplit(sp_name, "_")[[1]][2]
+  
+  # count records.
+  .count <- dismo::gbif(
+    genus = gen,
+    species = sp,
+    ext = ext_sp,
+    geo = TRUE,
+    removeZeros = TRUE,
+    download = FALSE
+  )
+  if (.count >= 10 & .count <= 200000) {
     .xx <- dismo::gbif(
       genus = gen,
       species = sp,
@@ -28,12 +47,14 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
       output_data <- NULL
     } else {
       if (all(c("lon", "lat") %in% colnames(.xx))) {
+        .xx <- .xx %>% 
+          dplyr::filter((basisOfRecord == "HUMAN_OBSERVATION" | basisOfRecord == "LIVING_SPECIMEN" | basisOfRecord == "MACHINE_OBSERVATION") & year >= 2010 )
         xx <- cbind(.xx$lon, .xx$lat)
         output_data <-
           matrix(unique(xx[complete.cases(xx), ]), ncol = 2)
         output_data <- cbind(sp_name, output_data)
         colnames(output_data) <- c("species", "x", "y")
-        if(nrow(output_data) >= 10){
+        if(nrow(output_data) >= min_occ){
           write.csv(output_data, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
         }
         } else {
@@ -47,23 +68,30 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir) {
   #return(output_data)
 }
 
-cc_wrapper <- function(sp_name, in_dir, out_dir){
+
+cc_wrapper <- function(sp_name, in_dir, out_dir, min_occ = 10){
   sp_df <- read.csv(paste0(in_dir,"/", sp_name, ".csv"))
-  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species")
+  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species",tests = c("capitals",
+                                                                                                           "centroids", 
+                                                                                                           "equal", 
+                                                                                                           "gbif", 
+                                                                                                           "institutions", 
+                                                                                                           "seas",
+                                                                                                           "zeros"))
   sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
   
   print(paste(sp_name, "cleaned!"))
-  if (nrow(sp_df)> 10){
+  if (nrow(sp_df)>= min_occ){
   write.csv(sp_df, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
   }
 }
 
 
 
-ras_extract <- function(sp_name, in_dir, out_dir) {
-  df <- vroom::vroom(paste0(in_dir, "/", sp_name, ".csv"))
-  xy <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
-  ras_ext <- raster::extract(env_crop, xy)
+ras_extract <- function(sp_name, in_dir, out_dir, raster_in) {
+  df <- vroom::vroom(paste0(in_dir, "/", sp_name, ".csv"), delim = ",")
+  xy <- sp::SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
+  ras_ext <- raster::extract(raster_in, xy)
   pres_ext <- data.frame(df, ras_ext)
   pres_ext <- pres_ext[complete.cases(pres_ext),]
   write.csv(x = pres_ext,
@@ -98,7 +126,7 @@ loadBioclim <-
     return(bioclim)
   }
 
-rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map){
+rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map, min_occ = 10 ){
   
   df <- read.csv(paste0(in_dir, "/", sp_name, ".csv"))
   pnts <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
@@ -118,7 +146,7 @@ rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map){
   
   print(paste0(sp_name, " rarefied!"))
   
-  if (nrow(df_rar)>10){
+  if (nrow(df_rar) >= min_occ){
     write.csv(df_rar, paste0(out_dir, "/", sp_name, ".csv"), row.names = FALSE)
   }
   
@@ -181,7 +209,7 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
   
   df_out <- data.frame(sp_name, sep_df)
   
-  write.csv(x = df_out,
+  write.csv(df_out,
             file = paste0(out_dir, "/", sp_name, ".csv"),
             row.names = FALSE)
   
