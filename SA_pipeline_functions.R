@@ -19,16 +19,18 @@ gbifCountData <- function(sp_name, ext_sp) {
 }
 
 
-gbifData <- function(sp_name, ext_sp, ext_occ, out_dir, min_occ = 10) {
+gbifData <- function(sp_name, ext_sp = NULL, ext_occ , out_dir, min_occ = 0) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(sp_name, "_")[[1]][1]
   sp <- strsplit(sp_name, "_")[[1]][2]
+  
+  if (is.null(ext_sp)){ext_sp = ext_occ}
   
   # count records.
   .count <- dismo::gbif(
     genus = gen,
     species = sp,
-    ext = ext_sp,
+    #ext = ext_sp,
     geo = TRUE,
     removeZeros = TRUE,
     download = FALSE
@@ -69,7 +71,7 @@ gbifData <- function(sp_name, ext_sp, ext_occ, out_dir, min_occ = 10) {
 }
 
 
-cc_wrapper <- function(sp_name, in_dir, out_dir, min_occ = 10){
+cc_wrapper <- function(sp_name, in_dir, out_dir, min_occ = 0){
   sp_df <- read.csv(paste0(in_dir,"/", sp_name, ".csv"))
   sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species",tests = c("capitals",
                                                                                                            "centroids", 
@@ -126,7 +128,7 @@ loadBioclim <-
     return(bioclim)
   }
 
-rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map, min_occ = 10 ){
+rarefyPoints<-function(sp_name, in_dir, out_dir, ref_map, min_occ = 0 ){
   
   df <- read.csv(paste0(in_dir, "/", sp_name, ".csv"))
   pnts <- SpatialPointsDataFrame(matrix(c(df$x, df$y), ncol = 2), df)
@@ -637,12 +639,12 @@ get_eval <- function(eval_file, threshold = "tss") {
 
 
 ensemble_model <-
-  function(sp_name_in, eval_df, preds, method = "weighted") {
-    preds_f <- raster::stack(preds[grepl(sp_name_in, preds)])
-    order <- gsub(paste0(sp_name_in, "_"), "" , names(preds_f))
+  function(sp_name, eval_df, preds, out_dir, method = "weighted") {
+    preds_f <- raster::stack(preds[grepl(sp_name, preds)])
+    order <- gsub(paste0(sp_name, "_"), "" , names(preds_f))
     
     evals_f <- eval_df %>%
-      dplyr::filter(sp_name == sp_name_in)
+      dplyr::filter(sp_name == sp_name)
     
     aucs <- evals_f$auc
     
@@ -669,7 +671,7 @@ ensemble_model <-
       
     }
     gc()
-    raster::writeRaster(ens_out, here::here("predictions/ensemble",paste0(method, "/",sp_name_in, "_ensemble.tif")), overwrite = TRUE)
+    raster::writeRaster(ens_out, paste0(out_dir, "/",method, "/",sp_name, "_ensemble.tif"), overwrite = TRUE)
     return(ens_out)
   }
 
