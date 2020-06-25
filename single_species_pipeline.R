@@ -9,6 +9,8 @@ library(lwgeom)
 library(raster)
 library(readr)
 library(sf)
+library(caret)
+library(randomForest)
 
 source("SA_pipeline_functions.R")
 
@@ -32,6 +34,7 @@ min_occ <-
 bioclim_layers <-
   c(1, 5, 6, 13, 14)#the number of the bioclim layers to be included as environmental variables - https://worldclim.org/bioclim
 
+lapply(bioclim_layers, chelsa_bioclim_get)  #this will download the chelsa bioclim data for the layers that you have selected 
 
 ###Loading and cropping the environmental data
 env_layers <-
@@ -99,6 +102,8 @@ if (!dir.exists(here::here("points/background/"))) {
 if (!dir.exists(here::here("points/pseudoabsence/"))) {
   dir.create(here::here("points/pseudoabsence/"))
 }
+
+wwf_ecoregions_get() # this should download the wwf ecoregions data and put it in the right place for you. 
 
 ecoreg <-
   sf::st_read(here::here("WWF_Ecoregions/wwf_terr_ecos.shp")) %>%
@@ -273,3 +278,4 @@ points(xy$x, xy$y)
 
 plot(weighted)
 points(xy$x, xy$y)
+

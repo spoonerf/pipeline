@@ -1,3 +1,31 @@
+
+chelsa_bioclim_get <- function(layer){
+  
+  if(!dir.exists("CHELSA")){
+    dir.create("CHELSA")
+  }
+  if(!file.exists(paste0("CHELSA/CHELSA_bio10_",stringr::str_pad(layer, 2, pad = "0"), ".tif"))){
+    download.file(paste0("https://envidatrepo.wsl.ch/uploads/chelsa/chelsa_V1/bioclim/integer/CHELSA_bio10_",stringr::str_pad(layer, 2, pad = "0"),".tif"), destfile = paste0("CHELSA/CHELSA_bio10_",stringr::str_pad(layer, 2, pad = "0"), ".tif"))
+  } else{
+    print("file already downloaded")
+  }
+  
+}
+
+
+wwf_ecoregions_get <- function(){
+  if(!dir.exists("WWF_Ecoregions")){
+    dir.create("WWF_Ecoregions")
+  }
+  download.file("https://c402277.ssl.cf1.rackcdn.com/publications/15/files/original/official_teow.zip?1349272619", destfile = "WWF_Ecoregions.zip")
+  unzip("WWF_Ecoregions.zip", exdir = "WWF_Ecoregions/")
+  lf <- list.files("WWF_Ecoregions/", recursive = TRUE, full.names = TRUE)
+  nlf <- basename(lf)
+  file.rename(lf, paste0("WWF_Ecoregions/",nlf))
+  file.remove("WWF_Ecoregions/official/")
+}
+
+
 gbifCountData <- function(sp_name, ext_sp) {
   # Include something for if there is nothing in GBIF...
   gen <- strsplit(sp_name, "_")[[1]][1]
