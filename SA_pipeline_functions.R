@@ -101,13 +101,17 @@ gbifData <- function(sp_name, ext_sp = NULL, ext_occ , out_dir, min_occ = 0) {
 
 cc_wrapper <- function(sp_name, in_dir, out_dir, min_occ = 0){
   sp_df <- read.csv(paste0(in_dir,"/", sp_name, ".csv"))
-  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df, lon = "x", lat = "y", species = "species",tests = c("capitals",
-                                                                                                           "centroids", 
-                                                                                                           "equal", 
-                                                                                                           "gbif", 
-                                                                                                           "institutions", 
-                                                                                                           "seas",
-                                                                                                           "zeros"))
+  sp_cc <- CoordinateCleaner::clean_coordinates(sp_df,
+                                                lon = "x",
+                                                lat = "y",
+                                                species = "species",
+                                                tests = c("capitals",
+                                                          "centroids",
+                                                          "equal", 
+                                                          "gbif", 
+                                                          "institutions",
+                                                          "seas",
+                                                          "zeros"))
   sp_df<-sp_df[which(sp_cc$.summary == TRUE),]
   
   print(paste(sp_name, "cleaned!"))
@@ -140,10 +144,6 @@ loadBioclim <-
                              pattern = paste0(extension, "$"),
                              full.names = TRUE)
     bioclim <- raster::stack(bio_layers)
-    #  bioclim <- raster::stack()    #don't think this section is needed, have replaced with the line above but maybe I'm missing something
-    #  for (i in bio_layers) {
-    #    bioclim <- raster::stack(bioclim, raster[i])
-    #  }
     if (!is.null(extent)) {
       bioclim <- raster::crop(bioclim, extent)
     }
@@ -220,9 +220,9 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
   if (type == "pseudoabsence"){
     
     diss_bkg_polygon <- sf::st_union(bkg_polygon)
-    sf_int_trans <- st_transform(sf_int, 54030) #robinson projection
+    sf_int_trans <- st_transform(sf_int, "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m no_defs") #robinson projection
     buff_pnts <- sf::st_buffer(sf_int_trans, buffer*1000)  
-    buff_pnts <- st_transform(buff_pnts, 4326) #should maybe get the original crs and have that here instead
+    buff_pnts <- st_transform(buff_pnts, "+proj=longlat +datum=WGS84 +no_defs") #should maybe get the original crs and have that here instead
     buff_pnts <- sf::st_union(buff_pnts)
     diff_bkg_polygon <- sf::st_difference(diss_bkg_polygon, buff_pnts)  
     points_out <- diff_bkg_polygon %>% 
