@@ -222,7 +222,7 @@ background_sampler <- function(sp_name, in_dir, out_dir, dens_abs = "absolute",
     diss_bkg_polygon <- sf::st_union(bkg_polygon)
     sf_int_trans <- st_transform(sf_int, "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m no_defs") #robinson projection
     buff_pnts <- sf::st_buffer(sf_int_trans, buffer*1000)  
-    buff_pnts <- st_transform(buff_pnts, "+proj=longlat +datum=WGS84 +no_defs") #should maybe get the original crs and have that here instead
+    buff_pnts <- st_transform(buff_pnts, crs(sf_int)) #should maybe get the original crs and have that here instead
     buff_pnts <- sf::st_union(buff_pnts)
     diff_bkg_polygon <- sf::st_difference(diss_bkg_polygon, buff_pnts)  
     points_out <- diff_bkg_polygon %>% 
