@@ -17,14 +17,14 @@ source("SA_pipeline_functions.R")
 # Data Preparation
 
 sp_name <-
-  "Lophorina_superba"  #add species name with underscore between genus and species
+  "Martes_martes"  #add species name with underscore between genus and species
 
 #We are only interested in species occurrences in the study region - covered in the extents below
 
-xmin <- 130
-xmax <- 151.5
-ymin <- -11
-ymax <- 4
+xmin <- -13
+xmax <- 2
+ymin <- 50
+ymax <- 62
 
 ext_occ <- extent(xmin, xmax, ymin, ymax)
 
@@ -234,6 +234,28 @@ evals_out <- lapply(eval_files, get_eval, threshold = "tss")
 eval_df <- do.call(rbind, evals_out)
 eval_df$sp_name <- as.character(eval_df$sp_name)
 
+eval_df
+###Plotting the Model Results
+
+bc_plot <- raster(paste0(here::here("predictions/bioclim/"), "/", sp_name, "_bioclim.tif"))
+glm_plot <- raster(paste0(here::here("predictions/glm/"), "/", sp_name, "_glm.tif"))
+rf_plot <-  raster(paste0(here::here("predictions/rf/"), "/", sp_name, "_rf.tif"))
+
+cuts=seq(0,1,0.05)#set breaks
+pal <- colorRampPalette(c("grey","forestgreen","darkgreen"))
+
+par(mfrow = c(2,2)) #change this to c(1,1) if you don't want all the plots in a pane
+plot(bc_plot, main = "Bioclim", breaks=cuts, col = pal(length(cuts)))
+plot(glm_plot, main = "GLM", breaks=cuts, col = pal(length(cuts)))
+plot(rf_plot, main = "RF", breaks=cuts, col = pal(length(cuts)))
+
+
+### Plotting the model results with thresholds from eval_df
+
+plot(bc_plot > eval_df$threshold[which(eval_df$model == "bioclim")], main = "Bioclim")
+plot(glm_plot > eval_df$threshold[which(eval_df$model == "glm")], main = "GLM")
+plot(rf_plot > eval_df$threshold[which(eval_df$model == "rf")], main = "RF")
+
 ###Build Ensemble Model
 
 if (!dir.exists(here::here("predictions/ensemble/majority_pa"))) {
@@ -255,6 +277,9 @@ preds <-
 
 preds <- preds[!grepl("/ensemble/", preds)]
 
+#maj_pa takes the thresholded outputs from the models and stacks them on top of eachother.
+#For each cell if the majority of the models predict a presence then the output of maj_pa shows a predicted presence
+
 maj_pa <- ensemble_model(
   sp_name = sp_name,
   eval_df = eval_df,
@@ -262,6 +287,9 @@ maj_pa <- ensemble_model(
   method = "majority_pa",
   out_dir = here::here("predictions/ensemble")
 )
+
+#weighted takes the outputs from the models and applies a weighted average 
+#to them, so that the best performing model (based on AUC) has a bigger influence on the output.
 
 weighted <- ensemble_model(
   sp_name = sp_name,
@@ -273,9 +301,10 @@ weighted <- ensemble_model(
 
 xy <-  read.csv(paste0(here::here("points/rarefied/"), "/", sp_name, ".csv"))
 
-plot(maj_pa)
+
+plot(maj_pa, main = "Majority Presence/Absence")
 points(xy$x, xy$y)
 
-plot(weighted)
+plot(weighted, main = "Weighted Ensemble Model", breaks=cuts, col = pal(10))
 points(xy$x, xy$y)
 
